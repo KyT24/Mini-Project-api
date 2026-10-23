@@ -85,7 +85,7 @@ model doctor_treatments {
 model doctors {
   id                BigInt              @id @default(autoincrement())
   user_id           BigInt              @unique
-  full_name         String              @db.VarChar(150)
+  name              String              @db.VarChar(150)
   bio               String?
   experience_years  Int?                @default(0)
   consultation_fee  Decimal             @default(0) @db.Decimal(12, 2)
