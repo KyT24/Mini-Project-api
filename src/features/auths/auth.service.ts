@@ -34,7 +34,7 @@ export class AuthsService {
     });
 
     if (!findUserByEmail)
-      throw new AppError(404, 'Email or password is incorrect');
+      throw new AppError(404, 'Either email, phoneNumber, or password is incorrect');
 
     const findUserByPassword = await prisma.user.findFirst({
       where: {
