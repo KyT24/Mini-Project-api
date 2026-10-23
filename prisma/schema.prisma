@@ -63,7 +63,7 @@ model appointments {
 model check_ins {
   id             BigInt          @id @default(autoincrement())
   appointment_id BigInt          @unique
-  checked_in_by  BigInt
+  checked_in_by  String
   checked_in_at  DateTime?       @default(now()) @db.Timestamp(6)
   status         checkin_status? @default(checked_in)
   appointments   appointments    @relation(fields: [appointment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -84,8 +84,8 @@ model doctor_treatments {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model doctors {
   id                BigInt              @id @default(autoincrement())
-  user_id           BigInt              @unique
-  full_name         String              @db.VarChar(150)
+  user_id           String              @unique
+  name              String              @db.VarChar(150)
   bio               String?
   experience_years  Int?                @default(0)
   consultation_fee  Decimal             @default(0) @db.Decimal(12, 2)
@@ -118,8 +118,8 @@ model membership_plans {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model notifications {
   id         BigInt    @id @default(autoincrement())
-  user_id    BigInt
-  title      String    @db.VarChar(150)
+  user_id    String
+  title     String    @db.VarChar(150)
   message    String
   type       String?   @db.VarChar(50)
   is_read    Boolean?  @default(false)
@@ -147,7 +147,7 @@ model patient_memberships {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model patient_profiles {
   id                  BigInt                @id @default(autoincrement())
-  user_id             BigInt                @unique
+  user_id             String                @unique
   full_name           String                @db.VarChar(150)
   phone_number        String?               @db.VarChar(20)
   date_of_birth       DateTime?             @db.Date
@@ -168,7 +168,7 @@ model payment_proofs {
   image_url           String               @db.VarChar(255)
   uploaded_at         DateTime?            @default(now()) @db.Timestamp(6)
   verified_at         DateTime?            @db.Timestamp(6)
-  verified_by         BigInt?
+  verified_by         String?
   verification_status verification_status? @default(pending)
   rejection_reason    String?
   appointments        appointments         @relation(fields: [appointment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
@@ -222,7 +222,7 @@ model session_queues {
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model staff_profiles {
   id           BigInt    @id @default(autoincrement())
-  user_id      BigInt    @unique
+  user_id      String    @unique
   full_name    String    @db.VarChar(150)
   phone_number String?   @db.VarChar(20)
   created_at   DateTime? @default(now()) @db.Timestamp(6)
