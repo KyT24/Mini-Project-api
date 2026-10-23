@@ -44,13 +44,6 @@ export class AuthsService {
 
     if (!findUserByPassword)
       throw new AppError(404, 'Password is incorrect');
-    // const isComparePassword = await Bcrypt.comparePassword(
-    //   body?.password,
-    //   findStaffByEmail?.password,
-    // );
-
-    // if (!isComparePassword)
-    //   throw new AppError(404, 'Email or password is incorrect');
 
     const token = await Jwt.generate(
       {

@@ -1,15 +1,6 @@
-/*
-  Warnings:
+-- CreateEnum
+CREATE TYPE "role" AS ENUM ('PATIENT', 'ADMIN', 'STAFF', 'DOCTOR');
 
-  - The primary key for the `users` table will be changed. If it partially fails, the table could be left without primary key constraint.
-  - You are about to drop the column `createdAt` on the `users` table. All the data in the column will be lost.
-  - You are about to drop the column `deletedAt` on the `users` table. All the data in the column will be lost.
-  - You are about to drop the column `updatedAt` on the `users` table. All the data in the column will be lost.
-  - The `id` column on the `users` table would be dropped and recreated. This will lead to data loss if there is data in the column.
-  - You are about to alter the column `email` on the `users` table. The data in that column could be lost. The data in that column will be cast from `Text` to `VarChar(255)`.
-  - You are about to alter the column `password` on the `users` table. The data in that column could be lost. The data in that column will be cast from `Text` to `VarChar(255)`.
-
-*/
 -- CreateEnum
 CREATE TYPE "appointment_status" AS ENUM ('pending', 'confirmed', 'checked_in', 'in_progress', 'completed', 'canceled', 'no_show');
 
@@ -31,29 +22,28 @@ CREATE TYPE "session_status" AS ENUM ('scheduled', 'ongoing', 'completed', 'canc
 -- CreateEnum
 CREATE TYPE "verification_status" AS ENUM ('pending', 'approved', 'rejected');
 
--- AlterTable
-ALTER TABLE "users" DROP CONSTRAINT "users_pkey",
-DROP COLUMN "createdAt",
-DROP COLUMN "deletedAt",
-DROP COLUMN "updatedAt",
-ADD COLUMN     "created_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
-ADD COLUMN     "is_active" BOOLEAN DEFAULT true,
-ADD COLUMN     "profile_picture" VARCHAR(255),
-ADD COLUMN     "updated_at" TIMESTAMP(6),
-DROP COLUMN "id",
-ADD COLUMN     "id" BIGSERIAL NOT NULL,
-ALTER COLUMN "email" SET DATA TYPE VARCHAR(255),
-ALTER COLUMN "password" SET DATA TYPE VARCHAR(255),
-ADD CONSTRAINT "users_pkey" PRIMARY KEY ("id");
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "email" VARCHAR(255) NOT NULL,
+    "password" VARCHAR(255) NOT NULL,
+    "role" "role" NOT NULL DEFAULT 'PATIENT',
+    "profile_picture" VARCHAR(255),
+    "is_active" BOOLEAN DEFAULT true,
+    "created_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(6),
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateTable
 CREATE TABLE "appointments" (
-    "id" BIGSERIAL NOT NULL,
-    "patient_id" BIGINT NOT NULL,
-    "doctor_id" BIGINT NOT NULL,
-    "session_id" BIGINT NOT NULL,
-    "treatment_id" BIGINT NOT NULL,
-    "patient_membership_id" BIGINT,
+    "id" TEXT NOT NULL,
+    "patient_id" TEXT NOT NULL,
+    "doctor_id" TEXT NOT NULL,
+    "session_id" TEXT NOT NULL,
+    "treatment_id" TEXT NOT NULL,
+    "patient_membership_id" TEXT,
     "appointment_code" VARCHAR(50) NOT NULL,
     "consultation_fee" DECIMAL(12,2) NOT NULL,
     "treatment_fee" DECIMAL(12,2) NOT NULL,
@@ -73,9 +63,9 @@ CREATE TABLE "appointments" (
 
 -- CreateTable
 CREATE TABLE "check_ins" (
-    "id" BIGSERIAL NOT NULL,
-    "appointment_id" BIGINT NOT NULL,
-    "checked_in_by" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "appointment_id" TEXT NOT NULL,
+    "checked_in_by" TEXT NOT NULL,
     "checked_in_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
     "status" "checkin_status" DEFAULT 'checked_in',
 
@@ -84,18 +74,18 @@ CREATE TABLE "check_ins" (
 
 -- CreateTable
 CREATE TABLE "doctor_treatments" (
-    "id" BIGSERIAL NOT NULL,
-    "doctor_id" BIGINT NOT NULL,
-    "treatment_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "doctor_id" TEXT NOT NULL,
+    "treatment_id" TEXT NOT NULL,
 
     CONSTRAINT "doctor_treatments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "doctors" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
-    "full_name" VARCHAR(150) NOT NULL,
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "name" VARCHAR(150) NOT NULL,
     "bio" TEXT,
     "experience_years" INTEGER DEFAULT 0,
     "consultation_fee" DECIMAL(12,2) NOT NULL DEFAULT 0,
@@ -109,7 +99,7 @@ CREATE TABLE "doctors" (
 
 -- CreateTable
 CREATE TABLE "membership_plans" (
-    "id" BIGSERIAL NOT NULL,
+    "id" TEXT NOT NULL,
     "name" VARCHAR(100) NOT NULL,
     "description" TEXT,
     "price" DECIMAL(12,2) NOT NULL,
@@ -124,8 +114,8 @@ CREATE TABLE "membership_plans" (
 
 -- CreateTable
 CREATE TABLE "notifications" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "title" VARCHAR(150) NOT NULL,
     "message" TEXT NOT NULL,
     "type" VARCHAR(50),
@@ -138,9 +128,9 @@ CREATE TABLE "notifications" (
 
 -- CreateTable
 CREATE TABLE "patient_memberships" (
-    "id" BIGSERIAL NOT NULL,
-    "patient_id" BIGINT NOT NULL,
-    "plan_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "patient_id" TEXT NOT NULL,
+    "plan_id" TEXT NOT NULL,
     "start_date" DATE NOT NULL,
     "end_date" DATE NOT NULL,
     "price_paid" DECIMAL(12,2) NOT NULL,
@@ -153,8 +143,8 @@ CREATE TABLE "patient_memberships" (
 
 -- CreateTable
 CREATE TABLE "patient_profiles" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "full_name" VARCHAR(150) NOT NULL,
     "phone_number" VARCHAR(20),
     "date_of_birth" DATE,
@@ -168,12 +158,12 @@ CREATE TABLE "patient_profiles" (
 
 -- CreateTable
 CREATE TABLE "payment_proofs" (
-    "id" BIGSERIAL NOT NULL,
-    "appointment_id" BIGINT NOT NULL,
+    "id" SERIAL NOT NULL,
+    "appointment_id" TEXT NOT NULL,
     "image_url" VARCHAR(255) NOT NULL,
     "uploaded_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
     "verified_at" TIMESTAMP(6),
-    "verified_by" BIGINT,
+    "verified_by" TEXT,
     "verification_status" "verification_status" DEFAULT 'pending',
     "rejection_reason" TEXT,
 
@@ -182,8 +172,8 @@ CREATE TABLE "payment_proofs" (
 
 -- CreateTable
 CREATE TABLE "practice_sessions" (
-    "id" BIGSERIAL NOT NULL,
-    "doctor_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "doctor_id" TEXT NOT NULL,
     "session_date" DATE NOT NULL,
     "start_time" TIME(6) NOT NULL,
     "end_time" TIME(6) NOT NULL,
@@ -197,10 +187,10 @@ CREATE TABLE "practice_sessions" (
 
 -- CreateTable
 CREATE TABLE "ratings" (
-    "id" BIGSERIAL NOT NULL,
-    "appointment_id" BIGINT NOT NULL,
-    "patient_id" BIGINT NOT NULL,
-    "doctor_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "appointment_id" TEXT NOT NULL,
+    "patient_id" TEXT NOT NULL,
+    "doctor_id" TEXT NOT NULL,
     "rating" SMALLINT NOT NULL,
     "review" TEXT,
     "created_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
@@ -211,8 +201,8 @@ CREATE TABLE "ratings" (
 
 -- CreateTable
 CREATE TABLE "session_queues" (
-    "id" BIGSERIAL NOT NULL,
-    "session_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "session_id" TEXT NOT NULL,
     "current_number" INTEGER DEFAULT 0,
     "last_queue_number" INTEGER DEFAULT 0,
     "updated_at" TIMESTAMP(6),
@@ -222,8 +212,8 @@ CREATE TABLE "session_queues" (
 
 -- CreateTable
 CREATE TABLE "staff_profiles" (
-    "id" BIGSERIAL NOT NULL,
-    "user_id" BIGINT NOT NULL,
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
     "full_name" VARCHAR(150) NOT NULL,
     "phone_number" VARCHAR(20),
     "created_at" TIMESTAMP(6) DEFAULT CURRENT_TIMESTAMP,
@@ -234,7 +224,7 @@ CREATE TABLE "staff_profiles" (
 
 -- CreateTable
 CREATE TABLE "treatments" (
-    "id" BIGSERIAL NOT NULL,
+    "id" TEXT NOT NULL,
     "name" VARCHAR(150) NOT NULL,
     "description" TEXT,
     "price" DECIMAL(12,2) NOT NULL,
@@ -246,6 +236,9 @@ CREATE TABLE "treatments" (
 
     CONSTRAINT "treatments_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "appointments_appointment_code_key" ON "appointments"("appointment_code");
