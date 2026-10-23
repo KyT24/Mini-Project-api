@@ -21,7 +21,10 @@ export class AuthsService {
 
     return await prisma.user.create({
       data: {
-        ...body,
+    email: body.email,
+    password: body.password,
+    fullName: body.fullName,
+    phone_number: body.phone_number,
       },
     });
   }
