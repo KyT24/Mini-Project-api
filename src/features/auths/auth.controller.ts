@@ -22,18 +22,19 @@ export class AuthsController {
   static async login(req: Request, res: Response) {
     const { body } = validate(userLoginSchema, { body: req.body });
 
-    const { token, findUserByPassword } = await AuthsService.login({ body });
+    const { token, user } = await AuthsService.login({ body });
 
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'DEVELOPMENT',
+      secure: process.env.NODE_ENV === 'PRODUCTION',
       sameSite: 'lax',
+      maxAge: 60 * 60 * 1000,
     });
 
     res.status(200).json({
       success: true,
       message: 'User logged in successfully',
-      data: token,
+      data: { token, user },
     });
   }
 }

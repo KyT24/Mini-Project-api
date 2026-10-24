@@ -5,6 +5,8 @@ import cors, { CorsOptions } from 'cors';
 import { corsOptions } from './configs/cors.config';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { AuthRouter } from './features/auths/auth.route';
+import { doctorRouter } from './features/doctor/doctor.route';
+import { AppError } from './errors/app.error';
 
 const PORT: number = parseInt(process.env.PORT!);
 const API_PREFIX: string = process.env.API_PREFIX!;
@@ -15,7 +17,14 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(errorMiddleware);
 app.use(`${API_PREFIX}/auth`, AuthRouter);
+app.use(`${API_PREFIX}/doctors`, doctorRouter);
 app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (error instanceof AppError)
+    return res.status(error.status).json({
+      success: false,
+      message: error.message,
+      data: {},
+    });
   if (error instanceof Error)
     return res.status(500).json({
       success: false,
