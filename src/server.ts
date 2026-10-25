@@ -8,6 +8,7 @@ import { AuthRouter } from './features/auths/auth.route';
 import { doctorRouter } from './features/doctor/doctor.route';
 import { specialistRouter } from './features/specialist/specialist.route';
 import { appointmentRouter } from './features/appointment/appointment.route';
+import { adminAppointmentRouter } from './features/appointment/appointment-admin.route';
 import { patientRouter } from './features/patient/patient.route';
 import { scheduleRouter } from './features/schedule/schedule.route';
 import { AppError } from './errors/app.error';
@@ -24,6 +25,7 @@ app.use(`${API_PREFIX}/auth`, AuthRouter);
 app.use(`${API_PREFIX}/doctors`, doctorRouter);
 app.use(`${API_PREFIX}/specialists`, specialistRouter);
 app.use(`${API_PREFIX}/appointments`, appointmentRouter);
+app.use(`${API_PREFIX}/admin/appointments`, adminAppointmentRouter);
 app.use(`${API_PREFIX}/patients`, patientRouter);
 app.use(`${API_PREFIX}/schedules`, scheduleRouter);
 app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {

@@ -9,34 +9,19 @@ import {
   createAppointmentRequest,
   getAvailabilityRequest,
   getMyAppointmentsRequest,
+  rateAppointmentRequest,
 } from '../../validators/appointment.validator';
+import { BOOKING_WINDOW_DAYS, PAYMENT_HOLD_MINUTES } from './appointment.constants';
 import {
-  BOOKING_WINDOW_DAYS,
-  CLINIC_UTC_OFFSET,
-  PAYMENT_HOLD_MINUTES,
-} from './appointment.constants';
-
-type Tx = Prisma.TransactionClient;
-
-const appointmentInclude = {
-  doctors: { select: { id: true, full_name: true, photo: true } },
-  treatments: { select: { id: true, slug: true, name: true } },
-  practice_sessions: {
-    select: { id: true, session_date: true, start_time: true, end_time: true },
-  },
-  payment_proofs: {
-    select: { id: true, image_url: true, uploaded_at: true, verification_status: true },
-    orderBy: { uploaded_at: 'desc' },
-  },
-} satisfies Prisma.appointmentsInclude;
-
-// Waktu mulai jadwal dalam WIB
-const slotStartsAt = (date: string, time: string) =>
-  new Date(`${date}T${time}:00${CLINIC_UTC_OFFSET}`);
-
-// Tanggal hari ini (YYYY-MM-DD) di zona waktu klinik
-const clinicToday = () =>
-  new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  appointmentInclude,
+  clinicNow,
+  describe,
+  holdsQuota,
+  lockSession,
+  shiftQueueUp,
+  slotStartsAt,
+  syncStatuses,
+} from './appointment.helpers';
 
 const addDays = (date: string, days: number) => {
   const d = new Date(`${date}T00:00:00Z`);
@@ -44,31 +29,15 @@ const addDays = (date: string, days: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-// Janji temu yang memakai kuota: sudah bayar / menunggu verifikasi,
-// atau belum bayar tapi batas waktunya belum lewat
-const holdsQuota = (now: Date): Prisma.appointmentsWhereInput => ({
-  appointment_status: { notIn: ['canceled', 'no_show'] },
-  OR: [
-    { payment_status: { in: ['pending_verification', 'paid'] } },
-    { payment_status: 'unpaid', payment_deadline: { gt: now } },
-  ],
-});
-
 const generateCode = (date: string) =>
   `APT-${date.replace(/-/g, '')}-${randomBytes(3).toString('hex').toUpperCase()}`;
 
-export class AppointmentService {
-  // Tidak ada cron di Vercel: hold yang lewat 10 menit dilepas setiap kali
-  // data kuota/janji temu dibaca, sehingga kuotanya kembali tersedia
-  static async releaseExpiredHolds(db: Tx | typeof prisma = prisma) {
-    await db.appointments.updateMany({
-      where: { payment_status: 'unpaid', payment_deadline: { lte: new Date() } },
-      data: { payment_status: 'expired', appointment_status: 'canceled' },
-    });
-  }
+// Status yang masih boleh dibatalkan pasien (selama sesi belum dimulai)
+const CANCELABLE = ['waiting_payment', 'waiting_confirmation', 'done'];
 
+export class AppointmentService {
   private static assertBookableDate(date: string) {
-    const today = clinicToday();
+    const today = clinicNow().date;
     if (date < today || date > addDays(today, BOOKING_WINDOW_DAYS - 1))
       throw new AppError(
         422,
@@ -86,7 +55,7 @@ export class AppointmentService {
     const { doctor_id, date } = query;
     this.assertBookableDate(date);
     await this.findActiveDoctorOrFail(doctor_id);
-    await this.releaseExpiredHolds();
+    await syncStatuses();
 
     const now = new Date();
     const [schedules, sessions] = await Promise.all([
@@ -133,8 +102,8 @@ export class AppointmentService {
     const { treatment_slug, doctor_id, session_date, start_time } = body;
 
     this.assertBookableDate(session_date);
-    if (slotStartsAt(session_date, start_time) <= new Date())
-      throw new AppError(422, 'Schedule has already started');
+    const startsAt = slotStartsAt(session_date, start_time);
+    if (startsAt <= new Date()) throw new AppError(422, 'Schedule has already started');
 
     const [doctor, treatment] = await Promise.all([
       this.findActiveDoctorOrFail(doctor_id),
@@ -162,7 +131,7 @@ export class AppointmentService {
     });
 
     return await prisma.$transaction(async (tx) => {
-      await this.releaseExpiredHolds(tx);
+      await syncStatuses(tx);
 
       const session = await tx.practice_sessions.upsert({
         where: {
@@ -186,7 +155,7 @@ export class AppointmentService {
         throw new AppError(409, 'Schedule has been canceled');
 
       // Kunci baris sesi agar dua pasien tidak mengambil kuota terakhir bersamaan
-      await tx.$queryRaw`SELECT id FROM practice_sessions WHERE id = ${session.id} FOR UPDATE`;
+      await lockSession(tx, session.id);
 
       const now = new Date();
       const [booked, ownBooking] = await Promise.all([
@@ -214,7 +183,10 @@ export class AppointmentService {
           consultation_fee: consultationFee,
           treatment_fee: treatmentFee,
           total_amount: consultationFee.add(treatmentFee),
-          payment_deadline: new Date(now.getTime() + PAYMENT_HOLD_MINUTES * 60 * 1000),
+          // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
+          payment_deadline: new Date(
+            Math.min(now.getTime() + PAYMENT_HOLD_MINUTES * 60 * 1000, startsAt.getTime()),
+          ),
         },
         include: appointmentInclude,
       });
@@ -222,7 +194,7 @@ export class AppointmentService {
   }
 
   private static async findOwnOrFail(userId: string, id: string) {
-    await this.releaseExpiredHolds();
+    await syncStatuses();
 
     const appointment = await prisma.appointments.findFirst({
       where: { id, patient_profiles: { user_id: userId } },
@@ -233,25 +205,14 @@ export class AppointmentService {
     return appointment;
   }
 
-  // Sisa waktu dihitung server agar hitung mundur tidak bergantung jam perangkat
-  private static withRemaining<T extends { payment_status: string; payment_deadline: Date | null }>(
-    appointment: T,
-  ) {
-    const remaining_seconds =
-      appointment.payment_status === 'unpaid' && appointment.payment_deadline
-        ? Math.max(Math.floor((appointment.payment_deadline.getTime() - Date.now()) / 1000), 0)
-        : 0;
-    return { ...appointment, remaining_seconds };
-  }
-
   static async createAndDescribe(userId: string, request: createAppointmentRequest) {
-    return this.withRemaining(await this.create(userId, request));
+    return describe(await this.create(userId, request));
   }
 
   // Riwayat reservasi pasien, terbaru dulu (dipakai halaman /history)
   static async getOwnList(userId: string, { query }: getMyAppointmentsRequest) {
     const { page, limit } = query;
-    await this.releaseExpiredHolds();
+    await syncStatuses();
 
     const where: Prisma.appointmentsWhereInput = { patient_profiles: { user_id: userId } };
 
@@ -267,13 +228,13 @@ export class AppointmentService {
     ]);
 
     return {
-      appointments: appointments.map((a) => this.withRemaining(a)),
+      appointments: appointments.map(describe),
       meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
     };
   }
 
   static async getOwnById(userId: string, { params }: appointmentIdRequest) {
-    return this.withRemaining(await this.findOwnOrFail(userId, params.id));
+    return describe(await this.findOwnOrFail(userId, params.id));
   }
 
   static async uploadPaymentProof(
@@ -285,9 +246,9 @@ export class AppointmentService {
 
     const appointment = await this.findOwnOrFail(userId, params.id);
 
-    if (appointment.payment_status === 'expired')
+    if (appointment.status === 'expired')
       throw new AppError(410, 'Payment time has expired, please book again');
-    if (appointment.payment_status !== 'unpaid')
+    if (appointment.status !== 'waiting_payment')
       throw new AppError(409, 'Payment proof has already been uploaded');
 
     const extension = file.mimetype.split('/')[1];
@@ -298,8 +259,12 @@ export class AppointmentService {
 
     // Pastikan batas waktu belum lewat saat file selesai diunggah
     const updated = await prisma.appointments.updateMany({
-      where: { id: appointment.id, payment_status: 'unpaid', payment_deadline: { gt: new Date() } },
-      data: { payment_status: 'pending_verification' },
+      where: {
+        id: appointment.id,
+        status: 'waiting_payment',
+        payment_deadline: { gt: new Date() },
+      },
+      data: { status: 'waiting_confirmation' },
     });
     if (!updated.count)
       throw new AppError(410, 'Payment time has expired, please book again');
@@ -307,6 +272,60 @@ export class AppointmentService {
     await prisma.payment_proofs.create({
       data: { appointment_id: appointment.id, image_url: imageUrl },
     });
+
+    return this.getOwnById(userId, { params });
+  }
+
+  // Pasien membatalkan sebelum sesi dimulai; kuota kembali & antrean di belakangnya maju
+  static async cancel(userId: string, { params }: appointmentIdRequest) {
+    const appointment = await this.findOwnOrFail(userId, params.id);
+    if (!describe(appointment).can_cancel)
+      throw new AppError(409, 'Appointment can no longer be canceled');
+
+    await prisma.$transaction(async (tx) => {
+      await lockSession(tx, appointment.session_id);
+      // Baca ulang di dalam lock: status bisa berubah (approve admin) sejak dibaca
+      const current = await tx.appointments.findUniqueOrThrow({
+        where: { id: appointment.id },
+      });
+      if (!CANCELABLE.includes(current.status))
+        throw new AppError(409, 'Appointment can no longer be canceled');
+
+      await tx.appointments.update({
+        where: { id: current.id },
+        data: { status: 'canceled', queue_number: null, qr_token: null },
+      });
+
+      if (current.queue_number !== null)
+        await shiftQueueUp(tx, current.session_id, current.queue_number);
+    });
+
+    return this.getOwnById(userId, { params });
+  }
+
+  // Rating hanya untuk janji temu done yang sesinya sudah selesai, sekali per janji temu
+  static async rate(userId: string, { params, body }: rateAppointmentRequest) {
+    const appointment = await this.findOwnOrFail(userId, params.id);
+    if (appointment.ratings) throw new AppError(409, 'Appointment has already been rated');
+    if (!describe(appointment).can_rate)
+      throw new AppError(422, 'Appointment can be rated after the session is completed');
+
+    try {
+      await prisma.ratings.create({
+        data: {
+          appointment_id: appointment.id,
+          patient_id: appointment.patient_id,
+          doctor_id: appointment.doctor_id,
+          rating: body.rating,
+          review: body.review ?? null,
+        },
+      });
+    } catch (error) {
+      // Dua request bersamaan: unique appointment_id
+      if ((error as { code?: string }).code === 'P2002')
+        throw new AppError(409, 'Appointment has already been rated');
+      throw error;
+    }
 
     return this.getOwnById(userId, { params });
   }

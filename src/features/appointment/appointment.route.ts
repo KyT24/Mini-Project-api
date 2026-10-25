@@ -13,6 +13,8 @@ appointmentRouter.post('/', ...patientOnly, AppointmentController.createAppointm
 // /me harus didaftarkan sebelum /:id agar tidak dianggap sebagai id
 appointmentRouter.get('/me', ...patientOnly, AppointmentController.getMyAppointments);
 appointmentRouter.get('/:id', ...patientOnly, AppointmentController.getMyAppointmentById);
+appointmentRouter.patch('/:id/cancel', ...patientOnly, AppointmentController.cancelAppointment);
+appointmentRouter.post('/:id/rating', ...patientOnly, AppointmentController.rateAppointment);
 appointmentRouter.post(
   '/:id/payment-proof',
   ...patientOnly,

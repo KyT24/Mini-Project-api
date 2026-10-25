@@ -41,8 +41,8 @@ model appointments {
   treatment_fee         Decimal              @db.Decimal(12, 2)
   discount_amount       Decimal              @default(0) @db.Decimal(12, 2)
   total_amount          Decimal              @db.Decimal(12, 2)
-  appointment_status    appointment_status   @default(pending)
-  payment_status        payment_status       @default(unpaid)
+  // 6 status transaksi sesuai requirement (menggantikan appointment_status + payment_status)
+  status                transaction_status   @default(waiting_payment)
   payment_deadline      DateTime?            @db.Timestamp(6)
   queue_number          Int?
   checked_in_at         DateTime?            @db.Timestamp(6)
@@ -59,12 +59,12 @@ model appointments {
   ratings               ratings?
 
   @@unique([session_id, queue_number])
-  @@index([patient_id, appointment_status])
-  @@index([doctor_id, appointment_status])
+  @@index([patient_id, status])
+  @@index([doctor_id, status])
   @@index([session_id])
   @@index([treatment_id])
   @@index([patient_membership_id])
-  @@index([payment_status, payment_deadline])
+  @@index([status, payment_deadline])
 }
 
 model check_ins {
@@ -297,14 +297,13 @@ enum role {
   DOCTOR
 }
 
-enum appointment_status {
-  pending
-  confirmed
-  checked_in
-  in_progress
-  completed
+enum transaction_status {
+  waiting_payment
+  waiting_confirmation
+  done
+  rejected
+  expired
   canceled
-  no_show
 }
 
 enum checkin_status {
@@ -323,14 +322,6 @@ enum membership_status {
   active
   expired
   canceled
-}
-
-enum payment_status {
-  unpaid
-  pending_verification
-  paid
-  rejected
-  expired
 }
 
 enum session_status {
