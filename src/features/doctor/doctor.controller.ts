@@ -34,6 +34,16 @@ export class DoctorController {
     });
   }
 
+  static async uploadPhoto(req: Request, res: Response) {
+    const photo = await DoctorService.uploadPhoto(req.file);
+
+    res.status(201).json({
+      success: true,
+      message: 'photo uploaded successfully',
+      data: photo,
+    });
+  }
+
   static async getDoctorById(req: Request, res: Response) {
     const { params } = validate(doctorIdSchema, { params: req.params });
 

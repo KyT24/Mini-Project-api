@@ -29,7 +29,19 @@ const consultation_fee = z
 
 const id = z.uuid('Doctor id must be a valid uuid');
 
-const user_id = z.uuid('User id must be a valid uuid');
+// Data akun login dokter, dibuat bersamaan dengan profil dokter
+const email = z.email('Email is not valid').trim().max(255);
+
+const phone_number = z
+  .string('Phone number is required')
+  .trim()
+  .min(1, 'Phone number is required')
+  .max(20, 'Phone number have maximum 20 characters');
+
+const password = z
+  .string('Password is required')
+  .min(8, 'Password must be at least 8 characters')
+  .max(72, 'Password have maximum 72 characters');
 
 const full_name = z
   .string('Full name is required')
@@ -49,14 +61,21 @@ const photo = emptyToNull(
   z.string().trim().max(255, 'Photo have maximum 255 characters').nullable(),
 ).optional();
 
+const specialist_id = emptyToNull(
+  z.uuid('Specialist id must be a valid uuid').nullable(),
+).optional();
+
 export const createDoctorSchema = z.object({
   body: z.object({
-    user_id,
+    email,
+    phone_number,
+    password,
     full_name,
     bio,
     experience_years: experience_years.default(0),
     consultation_fee: consultation_fee.default('0'),
     photo,
+    specialist_id,
     is_active: boolFromString.default(true),
   }),
 });
@@ -69,6 +88,11 @@ export const getDoctorsSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(10),
     search: z.string().trim().max(150).optional(),
     is_active: boolFromString.optional(),
+    specialist_id: z.uuid().optional(),
+    min_fee: z.coerce.number('min_fee must be a number').min(0).optional(),
+    max_fee: z.coerce.number('max_fee must be a number').min(0).optional(),
+    // 0 = Minggu ... 6 = Sabtu
+    day_of_week: z.coerce.number().int().min(0).max(6).optional(),
     sort: z
       .enum(['newest', 'fee_asc', 'fee_desc', 'experience_desc'])
       .default('newest'),
@@ -83,7 +107,7 @@ export const doctorIdSchema = z.object({
 
 export type doctorIdRequest = z.infer<typeof doctorIdSchema>;
 
-// user_id tidak boleh diganti, minimal satu field dikirim
+// Data akun tidak diubah di sini, minimal satu field dikirim
 export const updateDoctorSchema = z.object({
   params: z.object({ id }),
   body: z
@@ -93,6 +117,7 @@ export const updateDoctorSchema = z.object({
       experience_years: experience_years.optional(),
       consultation_fee: consultation_fee.optional(),
       photo,
+      specialist_id,
       is_active: boolFromString.optional(),
     })
     .strict()
