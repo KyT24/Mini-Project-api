@@ -5,6 +5,7 @@ import {
   createAppointmentSchema,
   getAvailabilitySchema,
   getMyAppointmentsSchema,
+  rateAppointmentSchema,
 } from '../../validators/appointment.validator';
 import { validate } from '../../validators/validate';
 import { AppointmentService } from './appointment.service';
@@ -75,6 +76,35 @@ export class AppointmentController {
     res.status(200).json({
       success: true,
       message: 'payment proof uploaded successfully',
+      data: appointment,
+    });
+  }
+
+  static async cancelAppointment(req: Request, res: Response) {
+    const { params } = validate(appointmentIdSchema, { params: req.params });
+    const auth = res.locals.auth as TAuthPayload;
+
+    const appointment = await AppointmentService.cancel(auth.id, { params });
+
+    res.status(200).json({
+      success: true,
+      message: 'appointment canceled successfully',
+      data: appointment,
+    });
+  }
+
+  static async rateAppointment(req: Request, res: Response) {
+    const { params, body } = validate(rateAppointmentSchema, {
+      params: req.params,
+      body: req.body,
+    });
+    const auth = res.locals.auth as TAuthPayload;
+
+    const appointment = await AppointmentService.rate(auth.id, { params, body });
+
+    res.status(201).json({
+      success: true,
+      message: 'rating submitted successfully',
       data: appointment,
     });
   }
