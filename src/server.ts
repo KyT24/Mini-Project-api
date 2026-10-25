@@ -6,6 +6,10 @@ import { corsOptions } from './configs/cors.config';
 import { errorMiddleware } from './middlewares/error.middleware';
 import { AuthRouter } from './features/auths/auth.route';
 import { doctorRouter } from './features/doctor/doctor.route';
+import { specialistRouter } from './features/specialist/specialist.route';
+import { appointmentRouter } from './features/appointment/appointment.route';
+import { patientRouter } from './features/patient/patient.route';
+import { scheduleRouter } from './features/schedule/schedule.route';
 import { AppError } from './errors/app.error';
 
 const PORT: number = parseInt(process.env.PORT!);
@@ -18,6 +22,10 @@ app.use(cookieParser());
 app.use(errorMiddleware);
 app.use(`${API_PREFIX}/auth`, AuthRouter);
 app.use(`${API_PREFIX}/doctors`, doctorRouter);
+app.use(`${API_PREFIX}/specialists`, specialistRouter);
+app.use(`${API_PREFIX}/appointments`, appointmentRouter);
+app.use(`${API_PREFIX}/patients`, patientRouter);
+app.use(`${API_PREFIX}/schedules`, scheduleRouter);
 app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
   if (error instanceof AppError)
     return res.status(error.status).json({
