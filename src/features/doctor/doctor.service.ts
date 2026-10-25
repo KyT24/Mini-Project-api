@@ -10,6 +10,7 @@ import {
   updateDoctorRequest,
 } from '../../validators/doctor.validator';
 import { Prisma } from '../../generated/prisma/client';
+import { LATEST_REVIEWS_LIMIT } from '../appointment/appointment.constants';
 
 const doctorInclude = {
   users: {
@@ -160,8 +161,35 @@ export class DoctorService {
     return { url };
   }
 
+  // Profil dokter + ringkasan rating & ulasan terbaru
   static async getById({ params }: doctorIdRequest) {
-    return await this.findOrFail(params.id);
+    const where = { doctor_id: params.id };
+
+    const [doctor, summary, reviews] = await Promise.all([
+      this.findOrFail(params.id),
+      prisma.ratings.aggregate({ where, _avg: { rating: true }, _count: { rating: true } }),
+      // Nama pasien dikirim penuh, frontend hanya menampilkan nama depan
+      prisma.ratings.findMany({
+        where,
+        orderBy: { created_at: 'desc' },
+        take: LATEST_REVIEWS_LIMIT,
+        select: {
+          id: true,
+          rating: true,
+          review: true,
+          created_at: true,
+          patient_profiles: { select: { users: { select: { full_name: true } } } },
+        },
+      }),
+    ]);
+
+    const avg = summary._avg.rating;
+    return {
+      ...doctor,
+      rating_avg: avg === null ? null : Number(avg.toFixed(1)),
+      rating_count: summary._count.rating,
+      reviews,
+    };
   }
 
   static async update({ params, body }: updateDoctorRequest) {
