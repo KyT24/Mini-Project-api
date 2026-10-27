@@ -51,7 +51,27 @@ export class AuthsController {
     res.status(200).json({
       success: true,
       message: 'User logged in successfully',
-      data: token,
+      data: { token, user },
+    });
+  }
+
+  static async me(req: Request, res: Response) {
+    const user = await AuthsService.me(res.locals.auth.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'User fetched successfully',
+      data: user,
+    });
+  }
+
+  static async logout(req: Request, res: Response) {
+    res.clearCookie('token', cookieOptions);
+
+    res.status(200).json({
+      success: true,
+      message: 'User logged out successfully',
+      data: {},
     });
   }
 }

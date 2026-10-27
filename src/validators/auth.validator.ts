@@ -18,7 +18,11 @@ const password = z
   .min(1, 'Password is required field')
   .max(72, 'Password have maximum 72 characters');
 
-const role = z.enum(['ADMIN', 'STAFF', 'DOCTOR', 'PATIENT']);
+const phone_number = z
+  .string()
+  .trim()
+  .min(1, 'Phone number is required field')
+  .max(20, 'Phone number have maximum 20 characters');
 
 export const userRegisterSchema = z.object({
   body: z.object({
@@ -26,7 +30,6 @@ export const userRegisterSchema = z.object({
     email,
     phone_number,
     password,
-    role,
   }),
 });
 
