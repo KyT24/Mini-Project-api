@@ -10,7 +10,11 @@ import {
 } from '../../validators/auth.validator';
 
 export class AuthsService {
-  static async register({ body }: userRegisterRequest) {
+  // role default PATIENT; ADMIN hanya lewat endpoint /auth/admins yang dijaga
+  static async register(
+    { body }: userRegisterRequest,
+    role: 'PATIENT' | 'ADMIN' = 'PATIENT',
+  ) {
     const findUserByEmail = await prisma.user.findUnique({
       where: {
         email: body?.email,
@@ -19,14 +23,27 @@ export class AuthsService {
 
     if (findUserByEmail) throw new AppError(409, 'email already registered');
 
-    return await prisma.user.create({
-      data: {
-    email: body.email,
-    password: body.password,
-    fullName: body.fullName,
-    phone_number: body.phone_number,
+    const findUserByPhone = await prisma.user.findUnique({
+      where: {
+        phone_number: body?.phone_number,
       },
     });
+
+    if (findUserByPhone)
+      throw new AppError(409, 'phone number already registered');
+
+    const hashedPassword = await Bcrypt.hashPassword(body.password);
+
+    // role tidak pernah diambil dari request body
+    const { password, ...user } = await prisma.user.create({
+      data: {
+        ...body,
+        password: hashedPassword,
+        role,
+      },
+    });
+
+    return user;
   }
 
   static async login({ body }: userLoginRequest) {
@@ -37,29 +54,45 @@ export class AuthsService {
     });
 
     if (!findUserByEmail)
-      throw new AppError(404, 'Either email, phoneNumber, or password is incorrect');
+      throw new AppError(401, 'Email or password is incorrect');
 
-    const findUserByPassword = await prisma.user.findFirst({
-      where: {
-        password: body.password,
-      },
-    });
+    const isPasswordValid = await Bcrypt.comparePassword(
+      body.password,
+      findUserByEmail.password,
+    );
 
-    if (!findUserByPassword)
-      throw new AppError(404, 'Password is incorrect');
+    if (!isPasswordValid)
+      throw new AppError(401, 'Email or password is incorrect');
 
     const token = await Jwt.generate(
       {
         id: findUserByEmail?.id,
-        role: findUserByPassword?.role,
+        role: findUserByEmail?.role,
       },
       process.env.JWT_SECRET_KEY!,
       { expiresIn: '1h' },
     );
 
+    const { password, ...user } = findUserByEmail;
+
     return {
       token,
-      findUserByPassword,
+      user,
     };
+  }
+
+  static async me(id: string) {
+    const findUserById = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+    });
+
+    if (!findUserById || !findUserById.is_active)
+      throw new AppError(401, 'Unauthorized');
+
+    const { password, ...user } = findUserById;
+
+    return user;
   }
 }

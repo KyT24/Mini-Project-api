@@ -2,6 +2,8 @@ import { CorsOptions } from "cors";
 
 
 export const corsOptions: CorsOptions = {
+  // Izinkan cookie/credential dari frontend (axios withCredentials: true)
+  credentials: true,
   origin: function (
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void,

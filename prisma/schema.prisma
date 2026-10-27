@@ -9,15 +9,15 @@ datasource db {
 
 model user {
   id               String            @id @default(uuid())
-  fullName         String            @db.VarChar(100)
   phone_number     String            @unique @db.VarChar(20)
   email            String            @unique @db.VarChar(255)
+  full_name        String            @db.VarChar(150)
   password         String            @db.VarChar(255)
   role             role              @default(PATIENT)
   profile_picture  String?           @db.VarChar(255)
-  is_active        Boolean?          @default(true)
-  created_at       DateTime?         @default(now()) @db.Timestamp(6)
-  updated_at       DateTime?         @db.Timestamp(6)
+  is_active        Boolean           @default(true)
+  created_at       DateTime          @default(now()) @db.Timestamp(6)
+  updated_at       DateTime          @updatedAt @db.Timestamp(6)
   check_ins        check_ins[]
   doctors          doctors?
   notifications    notifications[]
@@ -25,10 +25,10 @@ model user {
   payment_proofs   payment_proofs[]
   staff_profiles   staff_profiles?
 
+  @@index([role, is_active])
   @@map("users")
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model appointments {
   id                    String               @id @default(uuid())
   patient_id            String
@@ -41,68 +41,108 @@ model appointments {
   treatment_fee         Decimal              @db.Decimal(12, 2)
   discount_amount       Decimal              @default(0) @db.Decimal(12, 2)
   total_amount          Decimal              @db.Decimal(12, 2)
-  appointment_status    appointment_status   @default(pending)
-  payment_status        payment_status       @default(unpaid)
+  // 6 status transaksi sesuai requirement (menggantikan appointment_status + payment_status)
+  status                transaction_status   @default(waiting_payment)
   payment_deadline      DateTime?            @db.Timestamp(6)
   queue_number          Int?
   checked_in_at         DateTime?            @db.Timestamp(6)
   qr_token              String?              @unique @db.VarChar(255)
-  created_at            DateTime?            @default(now()) @db.Timestamp(6)
-  updated_at            DateTime?            @db.Timestamp(6)
-  doctors               doctors              @relation(fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  patient_profiles      patient_profiles     @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  patient_memberships   patient_memberships? @relation(fields: [patient_membership_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  practice_sessions     practice_sessions    @relation(fields: [session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  treatments            treatments           @relation(fields: [treatment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  created_at            DateTime             @default(now()) @db.Timestamp(6)
+  updated_at            DateTime             @updatedAt @db.Timestamp(6)
+  doctors               doctors              @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
+  patient_profiles      patient_profiles     @relation(fields: [patient_id], references: [id], onDelete: Restrict)
+  patient_memberships   patient_memberships? @relation(fields: [patient_membership_id], references: [id], onDelete: SetNull)
+  practice_sessions     practice_sessions    @relation(fields: [session_id], references: [id], onDelete: Restrict)
+  treatments            treatments           @relation(fields: [treatment_id], references: [id], onDelete: Restrict)
   check_ins             check_ins?
   payment_proofs        payment_proofs[]
   ratings               ratings?
 
   @@unique([session_id, queue_number])
+  @@index([patient_id, status])
+  @@index([doctor_id, status])
+  @@index([session_id])
+  @@index([treatment_id])
+  @@index([patient_membership_id])
+  @@index([status, payment_deadline])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model check_ins {
-  id             String          @id @default(uuid())
-  appointment_id String          @unique
+  id             String         @id @default(uuid())
+  appointment_id String         @unique
   checked_in_by  String
-  checked_in_at  DateTime?       @default(now()) @db.Timestamp(6)
-  status         checkin_status? @default(checked_in)
-  appointments   appointments    @relation(fields: [appointment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users          user            @relation(fields: [checked_in_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  checked_in_at  DateTime       @default(now()) @db.Timestamp(6)
+  status         checkin_status @default(checked_in)
+  appointments   appointments   @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  users          user           @relation(fields: [checked_in_by], references: [id], onDelete: Restrict)
+
+  @@index([checked_in_by])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model doctor_treatments {
   id           String     @id @default(uuid())
   doctor_id    String
   treatment_id String
-  doctors      doctors    @relation(fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  treatments   treatments @relation(fields: [treatment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  doctors      doctors    @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+  treatments   treatments @relation(fields: [treatment_id], references: [id], onDelete: Cascade)
 
   @@unique([doctor_id, treatment_id])
+  @@index([treatment_id])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model doctors {
   id                String              @id @default(uuid())
   user_id           String              @unique
+  full_name         String              @db.VarChar(150)
   bio               String?
-  experience_years  Int?                @default(0)
+  experience_years  Int                 @default(0)
   consultation_fee  Decimal             @default(0) @db.Decimal(12, 2)
   photo             String?             @db.VarChar(255)
-  is_active         Boolean?            @default(true)
-  created_at        DateTime?           @default(now()) @db.Timestamp(6)
-  updated_at        DateTime?           @db.Timestamp(6)
+  specialist_id     String?
+  is_active         Boolean             @default(true)
+  created_at        DateTime            @default(now()) @db.Timestamp(6)
+  updated_at        DateTime            @updatedAt @db.Timestamp(6)
   appointments      appointments[]
+  doctor_schedules  doctor_schedules[]
   doctor_treatments doctor_treatments[]
-  users             user                @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users             user                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  specialists       specialists?        @relation(fields: [specialist_id], references: [id], onDelete: Restrict)
   practice_sessions practice_sessions[]
   ratings           ratings[]
+
+  @@index([is_active])
+  @@index([specialist_id])
 }
 
-/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+// Jadwal praktik mingguan; sesi per tanggal dibuat dari sini saat booking pertama
+model doctor_schedules {
+  id            String   @id @default(uuid())
+  doctor_id     String
+  day_of_week   Int      @db.SmallInt // 0 = Minggu ... 6 = Sabtu
+  start_time    DateTime @db.Time(6)
+  end_time      DateTime @db.Time(6)
+  patient_quota Int
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now()) @db.Timestamp(6)
+  updated_at    DateTime @updatedAt @db.Timestamp(6)
+  doctors       doctors  @relation(fields: [doctor_id], references: [id], onDelete: Cascade)
+
+  @@unique([doctor_id, day_of_week, start_time])
+  @@index([day_of_week, is_active])
+}
+
+model specialists {
+  id          String    @id @default(uuid())
+  name        String    @unique @db.VarChar(100)
+  description String?
+  is_active   Boolean   @default(true)
+  created_at  DateTime  @default(now()) @db.Timestamp(6)
+  updated_at  DateTime  @updatedAt @db.Timestamp(6)
+  doctors     doctors[]
+
+  @@index([is_active])
+}
+
 model membership_plans {
   id                  String                @id @default(uuid())
   user_id             String                @unique @db.VarChar(100)
@@ -110,26 +150,26 @@ model membership_plans {
   price               Decimal               @db.Decimal(12, 2)
   duration_days       Int
   discount_percent    Decimal               @default(0) @db.Decimal(5, 2)
-  is_active           Boolean?              @default(true)
-  created_at          DateTime?             @default(now()) @db.Timestamp(6)
-  updated_at          DateTime?             @db.Timestamp(6)
+  is_active           Boolean               @default(true)
+  created_at          DateTime              @default(now()) @db.Timestamp(6)
+  updated_at          DateTime              @updatedAt @db.Timestamp(6)
   patient_memberships patient_memberships[]
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model notifications {
-  id         String    @id @default(uuid())
-  user_id    String     @unique
-  title     String    @db.VarChar(150)
+  id         String   @id @default(uuid())
+  user_id    String
+  title      String   @db.VarChar(150)
   message    String
-  type       String?   @db.VarChar(50)
-  is_read    Boolean?  @default(false)
-  sent_at    DateTime? @default(now()) @db.Timestamp(6)
-  created_at DateTime? @default(now()) @db.Timestamp(6)
-  users      user      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  type       String?  @db.VarChar(50)
+  is_read    Boolean  @default(false)
+  sent_at    DateTime @default(now()) @db.Timestamp(6)
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  users      user     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, is_read, created_at])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model patient_memberships {
   id               String            @id @default(uuid())
   patient_id       String
@@ -138,43 +178,48 @@ model patient_memberships {
   end_date         DateTime          @db.Date
   price_paid       Decimal           @db.Decimal(12, 2)
   status           membership_status @default(pending)
-  created_at       DateTime?         @default(now()) @db.Timestamp(6)
-  updated_at       DateTime?         @db.Timestamp(6)
+  created_at       DateTime          @default(now()) @db.Timestamp(6)
+  updated_at       DateTime          @updatedAt @db.Timestamp(6)
   appointments     appointments[]
-  patient_profiles patient_profiles  @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  membership_plans membership_plans  @relation(fields: [plan_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  patient_profiles patient_profiles  @relation(fields: [patient_id], references: [id], onDelete: Restrict)
+  membership_plans membership_plans  @relation(fields: [plan_id], references: [id], onDelete: Restrict)
+
+  @@index([patient_id, status])
+  @@index([plan_id])
+  @@index([end_date])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model patient_profiles {
   id                  String                @id @default(uuid())
   user_id             String                @unique
   date_of_birth       DateTime?             @db.Date
   gender              gender_type?
   address             String?
-  created_at          DateTime?             @default(now()) @db.Timestamp(6)
-  updated_at          DateTime?             @db.Timestamp(6)
+  created_at          DateTime              @default(now()) @db.Timestamp(6)
+  updated_at          DateTime              @updatedAt @db.Timestamp(6)
   appointments        appointments[]
   patient_memberships patient_memberships[]
-  users               user                  @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  users               user                  @relation(fields: [user_id], references: [id], onDelete: Cascade)
   ratings             ratings[]
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model payment_proofs {
-  id                  Int               @id @default(autoincrement())
+  id                  String              @id @default(uuid())
   appointment_id      String
-  image_url           String               @db.VarChar(255)
-  uploaded_at         DateTime?            @default(now()) @db.Timestamp(6)
-  verified_at         DateTime?            @db.Timestamp(6)
+  image_url           String              @db.VarChar(255)
+  uploaded_at         DateTime            @default(now()) @db.Timestamp(6)
+  verified_at         DateTime?           @db.Timestamp(6)
   verified_by         String?
-  verification_status verification_status? @default(pending)
+  verification_status verification_status @default(pending)
   rejection_reason    String?
-  appointments        appointments         @relation(fields: [appointment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  users               user?                @relation(fields: [verified_by], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  appointments        appointments        @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  users               user?               @relation(fields: [verified_by], references: [id], onDelete: SetNull)
+
+  @@index([appointment_id])
+  @@index([verified_by])
+  @@index([verification_status])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model practice_sessions {
   id             String          @id @default(uuid())
   doctor_id      String
@@ -182,18 +227,17 @@ model practice_sessions {
   start_time     DateTime        @db.Time(6)
   end_time       DateTime        @db.Time(6)
   patient_quota  Int
-  status         session_status? @default(scheduled)
-  created_at     DateTime?       @default(now()) @db.Timestamp(6)
-  updated_at     DateTime?       @db.Timestamp(6)
+  status         session_status  @default(scheduled)
+  created_at     DateTime        @default(now()) @db.Timestamp(6)
+  updated_at     DateTime        @updatedAt @db.Timestamp(6)
   appointments   appointments[]
-  doctors        doctors         @relation(fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  doctors        doctors         @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
   session_queues session_queues?
 
   @@unique([doctor_id, session_date, start_time])
+  @@index([session_date, status])
 }
 
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ratings {
   id               String           @id @default(uuid())
   appointment_id   String           @unique
@@ -201,45 +245,49 @@ model ratings {
   doctor_id        String
   rating           Int              @db.SmallInt
   review           String?
-  created_at       DateTime?        @default(now()) @db.Timestamp(6)
-  updated_at       DateTime?        @db.Timestamp(6)
-  appointments     appointments     @relation(fields: [appointment_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  doctors          doctors          @relation(fields: [doctor_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
-  patient_profiles patient_profiles @relation(fields: [patient_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  created_at       DateTime         @default(now()) @db.Timestamp(6)
+  updated_at       DateTime         @updatedAt @db.Timestamp(6)
+  appointments     appointments     @relation(fields: [appointment_id], references: [id], onDelete: Cascade)
+  doctors          doctors          @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
+  patient_profiles patient_profiles @relation(fields: [patient_id], references: [id], onDelete: Restrict)
+
+  @@index([doctor_id])
+  @@index([patient_id])
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model session_queues {
   id                String            @id @default(uuid())
   session_id        String            @unique
-  current_number    Int?              @default(0)
-  last_queue_number Int?              @default(0)
-  updated_at        DateTime?         @db.Timestamp(6)
-  practice_sessions practice_sessions @relation(fields: [session_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  current_number    Int               @default(0)
+  last_queue_number Int               @default(0)
+  updated_at        DateTime          @updatedAt @db.Timestamp(6)
+  practice_sessions practice_sessions @relation(fields: [session_id], references: [id], onDelete: Cascade)
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model staff_profiles {
-  id           String    @id @default(uuid())
-  user_id      String    @unique
-  created_at   DateTime? @default(now()) @db.Timestamp(6)
-  updated_at   DateTime? @db.Timestamp(6)
-  users        user      @relation(fields: [user_id], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  id         String   @id @default(uuid())
+  user_id    String   @unique
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  updated_at DateTime @updatedAt @db.Timestamp(6)
+  users      user     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
-/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model treatments {
   id                String              @id @default(uuid())
-
+  // Sama dengan slug di halaman /treatment/[treatmentSlug] (frontend)
+  slug              String?             @unique @db.VarChar(150)
+  name              String              @db.VarChar(150)
   description       String?
   price             Decimal             @db.Decimal(12, 2)
   duration_minutes  Int
   image             String?             @db.VarChar(255)
-  is_active         Boolean?            @default(true)
-  created_at        DateTime?           @default(now()) @db.Timestamp(6)
-  updated_at        DateTime?           @db.Timestamp(6)
+  is_active         Boolean             @default(true)
+  created_at        DateTime            @default(now()) @db.Timestamp(6)
+  updated_at        DateTime            @updatedAt @db.Timestamp(6)
   appointments      appointments[]
   doctor_treatments doctor_treatments[]
+
+  @@index([is_active])
 }
 
 enum role {
@@ -249,14 +297,13 @@ enum role {
   DOCTOR
 }
 
-enum appointment_status {
-  pending
-  confirmed
-  checked_in
-  in_progress
-  completed
+enum transaction_status {
+  waiting_payment
+  waiting_confirmation
+  done
+  rejected
+  expired
   canceled
-  no_show
 }
 
 enum checkin_status {
@@ -275,14 +322,6 @@ enum membership_status {
   active
   expired
   canceled
-}
-
-enum payment_status {
-  unpaid
-  pending_verification
-  paid
-  rejected
-  expired
 }
 
 enum session_status {
