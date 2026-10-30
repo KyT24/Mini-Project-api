@@ -44,7 +44,11 @@ export class AppointmentAdminService {
     const { status, page, limit } = query;
     await syncStatuses();
 
-    const where: Prisma.appointmentsWhereInput = { ...(status && { status }) };
+    // Filter status hanya dipakai jika dikirim dari query
+    const where: Prisma.appointmentsWhereInput = {};
+    if (status) {
+      where.status = status;
+    }
     // Antrean verifikasi: yang paling lama menunggu di atas
     const orderBy: Prisma.appointmentsOrderByWithRelationInput =
       status === 'waiting_confirmation' ? { updated_at: 'asc' } : { created_at: 'desc' };
@@ -81,10 +85,12 @@ export class AppointmentAdminService {
       await lockSession(tx, session_id);
 
       const appointment = await this.findOrFail(params.id, tx);
-      if (appointment.status !== 'waiting_confirmation')
+      if (appointment.status !== 'waiting_confirmation') {
         throw new AppError(409, `Appointment is ${appointment.status}, cannot be approved`);
-      if (sessionStartsAt(appointment.practice_sessions) <= new Date())
+      }
+      if (sessionStartsAt(appointment.practice_sessions) <= new Date()) {
         throw new AppError(409, 'Session has already started');
+      }
 
       const { _max } = await tx.appointments.aggregate({
         where: { session_id, status: 'done' },
@@ -95,11 +101,15 @@ export class AppointmentAdminService {
         where: { appointment_id: appointment.id, verification_status: 'pending' },
         data: { verification_status: 'approved', verified_by: adminId, verified_at: new Date() },
       });
+      // Nomor antrean = nomor terbesar saat ini + 1 (mulai dari 1 jika belum ada)
+      const lastQueueNumber = _max.queue_number ?? 0;
+      const nextQueueNumber = lastQueueNumber + 1;
+
       await tx.appointments.update({
         where: { id: appointment.id },
         data: {
           status: 'done',
-          queue_number: (_max.queue_number ?? 0) + 1,
+          queue_number: nextQueueNumber,
           qr_token: randomBytes(32).toString('hex'),
         },
       });

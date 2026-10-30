@@ -29,20 +29,26 @@ export const slotStartsAt = (date: string, time: string) =>
   new Date(`${date}T${time}:00${CLINIC_UTC_OFFSET}`);
 
 // Tanggal & jam sekarang di zona waktu klinik: { date: 'YYYY-MM-DD', time: 'HH:mm' }
+// WIB = UTC + 7 jam (dalam milidetik)
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+
 export const clinicNow = () => {
-  const iso = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString();
-  return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+  const nowInWib = new Date(Date.now() + WIB_OFFSET_MS);
+  const iso = nowInWib.toISOString(); // contoh: "2026-10-30T14:05:00.000Z"
+  const date = iso.slice(0, 10); // "2026-10-30"
+  const time = iso.slice(11, 16); // "14:05"
+  return { date, time };
 };
 
 // Kolom @db.Date sesi → "YYYY-MM-DD"
 const sessionDateOf = (session: { session_date: Date }) =>
   session.session_date.toISOString().slice(0, 10);
 
-export const sessionStartsAt = (s: { session_date: Date; start_time: Date }) =>
-  slotStartsAt(sessionDateOf(s), fromDbTime(s.start_time));
+export const sessionStartsAt = (session: { session_date: Date; start_time: Date }) =>
+  slotStartsAt(sessionDateOf(session), fromDbTime(session.start_time));
 
-export const sessionEndsAt = (s: { session_date: Date; end_time: Date }) =>
-  slotStartsAt(sessionDateOf(s), fromDbTime(s.end_time));
+export const sessionEndsAt = (session: { session_date: Date; end_time: Date }) =>
+  slotStartsAt(sessionDateOf(session), fromDbTime(session.end_time));
 
 // Janji temu yang memakai kuota: sudah bayar / menunggu konfirmasi,
 // atau belum bayar tapi batas waktunya belum lewat
@@ -90,11 +96,14 @@ export async function shiftQueueUp(tx: Tx, sessionId: string, from: number) {
     orderBy: { queue_number: 'asc' },
     select: { id: true, queue_number: true },
   });
-  for (const a of behind)
+  for (const appointment of behind) {
+    // queue_number pasti terisi karena sudah difilter "gt: from" di atas
+    const newQueueNumber = appointment.queue_number! - 1;
     await tx.appointments.update({
-      where: { id: a.id },
-      data: { queue_number: a.queue_number! - 1 },
+      where: { id: appointment.id },
+      data: { queue_number: newQueueNumber },
     });
+  }
 }
 
 type Describable = Prisma.appointmentsGetPayload<{ include: typeof appointmentInclude }>;
@@ -105,22 +114,29 @@ export function describe<T extends Describable>(appointment: T) {
   const now = Date.now();
   const session = appointment.practice_sessions;
   const started = sessionStartsAt(session).getTime() <= now;
-  const remaining_seconds =
-    appointment.status === 'waiting_payment' && appointment.payment_deadline
-      ? Math.max(Math.floor((appointment.payment_deadline.getTime() - now) / 1000), 0)
-      : 0;
+  const ended = sessionEndsAt(session).getTime() <= now;
+
+  // Sisa waktu bayar (detik), hanya untuk status waiting_payment. Tidak boleh minus
+  let remaining_seconds = 0;
+  if (appointment.status === 'waiting_payment' && appointment.payment_deadline) {
+    const remainingMs = appointment.payment_deadline.getTime() - now;
+    remaining_seconds = Math.max(Math.floor(remainingMs / 1000), 0);
+  }
+
+  // Boleh dibatalkan selama sesi belum mulai, dan statusnya masih aktif
+  const isPaidOrWaitingConfirmation =
+    appointment.status === 'done' || appointment.status === 'waiting_confirmation';
+  const isWaitingPaymentInTime =
+    appointment.status === 'waiting_payment' && remaining_seconds > 0;
+  const can_cancel = !started && (isPaidOrWaitingConfirmation || isWaitingPaymentInTime);
+
+  // Boleh diberi rating jika sudah done, belum pernah dirating, dan sesi sudah selesai
+  const can_rate = appointment.status === 'done' && !appointment.ratings && ended;
 
   return {
     ...appointment,
     remaining_seconds,
-    can_cancel:
-      !started &&
-      (appointment.status === 'done' ||
-        appointment.status === 'waiting_confirmation' ||
-        (appointment.status === 'waiting_payment' && remaining_seconds > 0)),
-    can_rate:
-      appointment.status === 'done' &&
-      !appointment.ratings &&
-      sessionEndsAt(session).getTime() <= now,
+    can_cancel,
+    can_rate,
   };
 }

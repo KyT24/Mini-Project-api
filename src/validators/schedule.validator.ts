@@ -1,10 +1,10 @@
 import * as z from 'zod';
 
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
-const boolFromString = z.preprocess((v) => {
-  if (v === 'true' || v === '1') return true;
-  if (v === 'false' || v === '0') return false;
-  return v;
+const boolFromString = z.preprocess((value) => {
+  if (value === 'true' || value === '1') return true;
+  if (value === 'false' || value === '0') return false;
+  return value;
 }, z.boolean('is_active must be true or false'));
 
 const id = z.uuid('Schedule id must be a valid uuid');
@@ -28,8 +28,8 @@ const patient_quota = z.coerce
   .max(100, 'Patient quota have maximum 100');
 
 // "HH:mm" bisa dibandingkan sebagai string
-const endAfterStart = (d: { start_time?: string; end_time?: string }) =>
-  !d.start_time || !d.end_time || d.end_time > d.start_time;
+const endAfterStart = (data: { start_time?: string; end_time?: string }) =>
+  !data.start_time || !data.end_time || data.end_time > data.start_time;
 const endAfterStartMessage = { message: 'End time must be after start time' };
 
 export const getSchedulesSchema = z.object({
@@ -71,7 +71,7 @@ export const updateScheduleSchema = z.object({
       is_active: boolFromString.optional(),
     })
     .strict()
-    .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    .refine((data) => Object.values(data).some((value) => value !== undefined), {
       message: 'At least one field must be provided',
     })
     .refine(endAfterStart, endAfterStartMessage),

@@ -3,15 +3,18 @@ import * as z from 'zod';
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    (value) => {
+      if (typeof value === 'string' && value.trim() === '') return null;
+      return value;
+    },
     schema,
   );
 
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
-const boolFromString = z.preprocess((v) => {
-  if (v === 'true' || v === '1') return true;
-  if (v === 'false' || v === '0') return false;
-  return v;
+const boolFromString = z.preprocess((value) => {
+  if (value === 'true' || value === '1') return true;
+  if (value === 'false' || value === '0') return false;
+  return value;
 }, z.boolean('is_active must be true or false'));
 
 const id = z.uuid('Specialist id must be a valid uuid');
@@ -60,7 +63,7 @@ export const updateSpecialistSchema = z.object({
       is_active: boolFromString.optional(),
     })
     .strict()
-    .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    .refine((data) => Object.values(data).some((value) => value !== undefined), {
       message: 'At least one field must be provided',
     }),
 });

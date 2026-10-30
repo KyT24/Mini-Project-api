@@ -23,14 +23,19 @@ import {
   syncStatuses,
 } from './appointment.helpers';
 
+// "2026-10-30" + 3 hari → "2026-11-02"
 const addDays = (date: string, days: number) => {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  const result = new Date(`${date}T00:00:00Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
 };
 
-const generateCode = (date: string) =>
-  `APT-${date.replace(/-/g, '')}-${randomBytes(3).toString('hex').toUpperCase()}`;
+// Kode reservasi, contoh: "APT-20261030-A1B2C3"
+const generateCode = (date: string) => {
+  const dateWithoutDash = date.replace(/-/g, ''); // "2026-10-30" → "20261030"
+  const randomPart = randomBytes(3).toString('hex').toUpperCase(); // 6 karakter acak
+  return `APT-${dateWithoutDash}-${randomPart}`;
+};
 
 // Status yang masih boleh dibatalkan pasien (selama sesi belum dimulai)
 const CANCELABLE = ['waiting_payment', 'waiting_confirmation', 'done'];
@@ -38,11 +43,12 @@ const CANCELABLE = ['waiting_payment', 'waiting_confirmation', 'done'];
 export class AppointmentService {
   private static assertBookableDate(date: string) {
     const today = clinicNow().date;
-    if (date < today || date > addDays(today, BOOKING_WINDOW_DAYS - 1))
+    if (date < today || date > addDays(today, BOOKING_WINDOW_DAYS - 1)) {
       throw new AppError(
         422,
         `Schedule date must be within the next ${BOOKING_WINDOW_DAYS} days`,
       );
+    }
   }
 
   private static async findActiveDoctorOrFail(id: string) {
@@ -78,7 +84,7 @@ export class AppointmentService {
     // Sesi yang sudah terbentuk memakai kuota saat dibuat, selain itu ikut jadwal
     const slots = schedules.map((schedule) => {
       const start_time = fromDbTime(schedule.start_time);
-      const session = sessions.find((s) => fromDbTime(s.start_time) === start_time);
+      const session = sessions.find((item) => fromDbTime(item.start_time) === start_time);
       const quota = session?.patient_quota ?? schedule.patient_quota;
       const booked = session?._count.appointments ?? 0;
       const remaining = Math.max(quota - booked, 0);
@@ -109,8 +115,9 @@ export class AppointmentService {
       this.findActiveDoctorOrFail(doctor_id),
       prisma.treatments.findUnique({ where: { slug: treatment_slug } }),
     ]);
-    if (!treatment || !treatment.is_active)
+    if (!treatment || !treatment.is_active) {
       throw new AppError(404, 'treatment not found');
+    }
 
     // Jam yang dipesan harus ada di jadwal praktik dokter pada hari itu
     const schedule = await prisma.doctor_schedules.findFirst({
@@ -151,8 +158,9 @@ export class AppointmentService {
         update: {},
       });
 
-      if (session.status === 'canceled')
+      if (session.status === 'canceled') {
         throw new AppError(409, 'Schedule has been canceled');
+      }
 
       // Kunci baris sesi agar dua pasien tidak mengambil kuota terakhir bersamaan
       await lockSession(tx, session.id);
@@ -165,13 +173,19 @@ export class AppointmentService {
         }),
       ]);
 
-      if (ownBooking)
+      if (ownBooking) {
         throw new AppError(409, 'You already have a booking on this schedule');
-      if (booked >= session.patient_quota)
+      }
+      if (booked >= session.patient_quota) {
         throw new AppError(409, 'Doctor quota for this schedule is full');
+      }
 
       const treatmentFee = treatment.price;
       const consultationFee = doctor.consultation_fee;
+
+      // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
+      const holdUntil = now.getTime() + PAYMENT_HOLD_MINUTES * 60 * 1000;
+      const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
 
       return await tx.appointments.create({
         data: {
@@ -183,10 +197,7 @@ export class AppointmentService {
           consultation_fee: consultationFee,
           treatment_fee: treatmentFee,
           total_amount: consultationFee.add(treatmentFee),
-          // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
-          payment_deadline: new Date(
-            Math.min(now.getTime() + PAYMENT_HOLD_MINUTES * 60 * 1000, startsAt.getTime()),
-          ),
+          payment_deadline: paymentDeadline,
         },
         include: appointmentInclude,
       });
@@ -246,10 +257,12 @@ export class AppointmentService {
 
     const appointment = await this.findOwnOrFail(userId, params.id);
 
-    if (appointment.status === 'expired')
+    if (appointment.status === 'expired') {
       throw new AppError(410, 'Payment time has expired, please book again');
-    if (appointment.status !== 'waiting_payment')
+    }
+    if (appointment.status !== 'waiting_payment') {
       throw new AppError(409, 'Payment proof has already been uploaded');
+    }
 
     const extension = file.mimetype.split('/')[1];
     const imageUrl = await Storage.upload(
@@ -266,8 +279,9 @@ export class AppointmentService {
       },
       data: { status: 'waiting_confirmation' },
     });
-    if (!updated.count)
+    if (!updated.count) {
       throw new AppError(410, 'Payment time has expired, please book again');
+    }
 
     await prisma.payment_proofs.create({
       data: { appointment_id: appointment.id, image_url: imageUrl },
@@ -279,8 +293,9 @@ export class AppointmentService {
   // Pasien membatalkan sebelum sesi dimulai; kuota kembali & antrean di belakangnya maju
   static async cancel(userId: string, { params }: appointmentIdRequest) {
     const appointment = await this.findOwnOrFail(userId, params.id);
-    if (!describe(appointment).can_cancel)
+    if (!describe(appointment).can_cancel) {
       throw new AppError(409, 'Appointment can no longer be canceled');
+    }
 
     await prisma.$transaction(async (tx) => {
       await lockSession(tx, appointment.session_id);
@@ -288,16 +303,18 @@ export class AppointmentService {
       const current = await tx.appointments.findUniqueOrThrow({
         where: { id: appointment.id },
       });
-      if (!CANCELABLE.includes(current.status))
+      if (!CANCELABLE.includes(current.status)) {
         throw new AppError(409, 'Appointment can no longer be canceled');
+      }
 
       await tx.appointments.update({
         where: { id: current.id },
         data: { status: 'canceled', queue_number: null, qr_token: null },
       });
 
-      if (current.queue_number !== null)
+      if (current.queue_number !== null) {
         await shiftQueueUp(tx, current.session_id, current.queue_number);
+      }
     });
 
     return this.getOwnById(userId, { params });
@@ -307,8 +324,9 @@ export class AppointmentService {
   static async rate(userId: string, { params, body }: rateAppointmentRequest) {
     const appointment = await this.findOwnOrFail(userId, params.id);
     if (appointment.ratings) throw new AppError(409, 'Appointment has already been rated');
-    if (!describe(appointment).can_rate)
+    if (!describe(appointment).can_rate) {
       throw new AppError(422, 'Appointment can be rated after the session is completed');
+    }
 
     try {
       await prisma.ratings.create({
@@ -322,8 +340,9 @@ export class AppointmentService {
       });
     } catch (error) {
       // Dua request bersamaan: unique appointment_id
-      if ((error as { code?: string }).code === 'P2002')
+      if ((error as { code?: string }).code === 'P2002') {
         throw new AppError(409, 'Appointment has already been rated');
+      }
       throw error;
     }
 

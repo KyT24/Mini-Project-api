@@ -29,8 +29,9 @@ export class AuthsService {
       },
     });
 
-    if (findUserByPhone)
+    if (findUserByPhone) {
       throw new AppError(409, 'phone number already registered');
+    }
 
     const hashedPassword = await Bcrypt.hashPassword(body.password);
 
@@ -53,16 +54,18 @@ export class AuthsService {
       },
     });
 
-    if (!findUserByEmail)
+    if (!findUserByEmail) {
       throw new AppError(401, 'Email or password is incorrect');
+    }
 
     const isPasswordValid = await Bcrypt.comparePassword(
       body.password,
       findUserByEmail.password,
     );
 
-    if (!isPasswordValid)
+    if (!isPasswordValid) {
       throw new AppError(401, 'Email or password is incorrect');
+    }
 
     const token = await Jwt.generate(
       {
@@ -88,8 +91,9 @@ export class AuthsService {
       },
     });
 
-    if (!findUserById || !findUserById.is_active)
+    if (!findUserById || !findUserById.is_active) {
       throw new AppError(401, 'Unauthorized');
+    }
 
     const { password, ...user } = findUserById;
 

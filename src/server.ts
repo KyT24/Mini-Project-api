@@ -29,18 +29,20 @@ app.use(`${API_PREFIX}/admin/appointments`, adminAppointmentRouter);
 app.use(`${API_PREFIX}/patients`, patientRouter);
 app.use(`${API_PREFIX}/schedules`, scheduleRouter);
 app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
-  if (error instanceof AppError)
+  if (error instanceof AppError) {
     return res.status(error.status).json({
       success: false,
       message: error.message,
       data: {},
     });
-  if (error instanceof Error)
+  }
+  if (error instanceof Error) {
     return res.status(500).json({
       success: false,
       message: error?.message,
       data: {},
     });
+  }
 });
 
 /* Centralized Error */

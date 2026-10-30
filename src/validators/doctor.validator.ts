@@ -87,7 +87,7 @@ export const getDoctorsSchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(10),
     search: z.string().trim().max(150).optional(),
-    is_active: boolFromString.optional(),
+    is_active: boolFromString.optional(), 
     specialist_id: z.uuid().optional(),
     min_fee: z.coerce.number('min_fee must be a number').min(0).optional(),
     max_fee: z.coerce.number('max_fee must be a number').min(0).optional(),

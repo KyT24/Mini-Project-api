@@ -5,8 +5,9 @@ import { AppError } from '../errors/app.error';
 // Pakai service role key (hanya di server) agar bisa menulis ke bucket
 const getClient = () => {
   const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY)
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     throw new AppError(500, 'file storage is not configured');
+  }
 
   return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false },

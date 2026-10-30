@@ -3,7 +3,10 @@ import * as z from 'zod';
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
   z.preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    (value) => {
+      if (typeof value === 'string' && value.trim() === '') return null;
+      return value;
+    },
     schema,
   );
 
@@ -25,7 +28,7 @@ const phone_number = z
 const date_of_birth = emptyToNull(
   z.iso
     .date('Date of birth must be YYYY-MM-DD')
-    .refine((v) => new Date(v) <= new Date(), {
+    .refine((date) => new Date(date) <= new Date(), {
       message: 'Date of birth cannot be in the future',
     })
     .nullable(),
@@ -49,7 +52,7 @@ export const updatePatientMeSchema = z.object({
       address,
     })
     .strict()
-    .refine((data) => Object.values(data).some((v) => v !== undefined), {
+    .refine((data) => Object.values(data).some((value) => value !== undefined), {
       message: 'At least one field must be provided',
     }),
 });

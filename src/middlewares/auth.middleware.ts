@@ -17,10 +17,8 @@ export const verifyToken = async (
   if (!token) throw new AppError(401, 'Unauthorized');
 
   try {
-    res.locals.auth = (await Jwt.verify(
-      token,
-      process.env.JWT_SECRET_KEY!,
-    )) as TAuthPayload;
+    const payload = await Jwt.verify(token, process.env.JWT_SECRET_KEY!);
+    res.locals.auth = payload as TAuthPayload;
   } catch {
     throw new AppError(401, 'Session expired, please login again');
   }
@@ -29,12 +27,14 @@ export const verifyToken = async (
 };
 
 // Pakai setelah verifyToken: tolak bila role tidak ada di daftar
-export const verifyRole =
-  (...roles: TAuthPayload['role'][]) =>
-  (req: Request, res: Response, next: NextFunction) => {
+// Contoh: verifyRole('ADMIN', 'STAFF') → menghasilkan middleware untuk route
+export const verifyRole = (...roles: TAuthPayload['role'][]) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     const auth = res.locals.auth as TAuthPayload | undefined;
-    if (!auth || !roles.includes(auth.role))
+    if (!auth || !roles.includes(auth.role)) {
       throw new AppError(403, 'Forbidden');
+    }
 
     next();
   };
+};

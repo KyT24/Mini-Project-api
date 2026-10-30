@@ -37,28 +37,40 @@ export class ScheduleService {
     end: string,
     exceptId?: string,
   ) {
-    const clash = await prisma.doctor_schedules.findFirst({
-      where: {
-        doctor_id: doctorId,
-        day_of_week: day,
-        start_time: { lt: toDbTime(end) },
-        end_time: { gt: toDbTime(start) },
-        ...(exceptId && { NOT: { id: exceptId } }),
-      },
-    });
+    // Bentrok jika jadwal lain mulai sebelum jadwal ini selesai
+    // dan selesai setelah jadwal ini mulai
+    const where: Prisma.doctor_schedulesWhereInput = {
+      doctor_id: doctorId,
+      day_of_week: day,
+      start_time: { lt: toDbTime(end) },
+      end_time: { gt: toDbTime(start) },
+    };
 
-    if (clash)
+    // Saat update, jadwal yang sedang diubah tidak ikut dicek
+    if (exceptId) {
+      where.NOT = { id: exceptId };
+    }
+
+    const clash = await prisma.doctor_schedules.findFirst({ where });
+
+    if (clash) {
       throw new AppError(
         409,
         `schedule overlaps with ${fromDbTime(clash.start_time)}-${fromDbTime(clash.end_time)}`,
       );
+    }
   }
 
   static async getAll({ query }: getSchedulesRequest) {
     const { doctor_id, is_active } = query;
 
+    const where: Prisma.doctor_schedulesWhereInput = { doctor_id };
+    if (is_active !== undefined) {
+      where.is_active = is_active;
+    }
+
     return await prisma.doctor_schedules.findMany({
-      where: { doctor_id, ...(is_active !== undefined && { is_active }) },
+      where,
       orderBy: scheduleOrder,
     });
   }
@@ -93,13 +105,19 @@ export class ScheduleService {
 
     const { start_time, end_time, ...schedule } = body;
 
+    const data: Prisma.doctor_schedulesUpdateInput = { ...schedule };
+
+    // Jam hanya diubah jika dikirim, lalu dikonversi ke format kolom DB
+    if (start_time) {
+      data.start_time = toDbTime(start_time);
+    }
+    if (end_time) {
+      data.end_time = toDbTime(end_time);
+    }
+
     return await prisma.doctor_schedules.update({
       where: { id: params.id },
-      data: {
-        ...schedule,
-        ...(start_time && { start_time: toDbTime(start_time) }),
-        ...(end_time && { end_time: toDbTime(end_time) }),
-      },
+      data,
     });
   }
 

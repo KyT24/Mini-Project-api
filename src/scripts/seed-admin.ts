@@ -8,13 +8,15 @@ async function main() {
   const { ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_FULL_NAME, ADMIN_PHONE } =
     process.env;
 
-  if (!ADMIN_EMAIL || !ADMIN_PASSWORD || !ADMIN_FULL_NAME || !ADMIN_PHONE)
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD || !ADMIN_FULL_NAME || !ADMIN_PHONE) {
     throw new Error(
       'Isi ADMIN_EMAIL, ADMIN_PASSWORD, ADMIN_FULL_NAME, dan ADMIN_PHONE di .env',
     );
+  }
 
-  if (ADMIN_PASSWORD.length < 8)
+  if (ADMIN_PASSWORD.length < 8) {
     throw new Error('ADMIN_PASSWORD minimal 8 karakter');
+  }
 
   const existing = await prisma.user.findFirst({
     where: { OR: [{ email: ADMIN_EMAIL }, { phone_number: ADMIN_PHONE }] },

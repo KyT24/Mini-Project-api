@@ -83,7 +83,10 @@ export type rejectAppointmentRequest = z.infer<typeof rejectAppointmentSchema>;
 // "" dari form dianggap null supaya review bisa dikosongkan
 const review = z
   .preprocess(
-    (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
+    (value) => {
+      if (typeof value === 'string' && value.trim() === '') return null;
+      return value;
+    },
     z.string().trim().max(500, 'Review have maximum 500 characters').nullable(),
   )
   .optional();

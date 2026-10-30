@@ -26,8 +26,9 @@ export class SpecialistService {
 
   private static async assertNameAvailable(name: string, exceptId?: string) {
     const existing = await prisma.specialists.findUnique({ where: { name } });
-    if (existing && existing.id !== exceptId)
+    if (existing && existing.id !== exceptId) {
       throw new AppError(409, 'specialist name already registered');
+    }
   }
 
   static async create({ body }: createSpecialistRequest) {
@@ -42,10 +43,14 @@ export class SpecialistService {
   static async getAll({ query }: getSpecialistsRequest) {
     const { page, limit, search, is_active } = query;
 
-    const where: Prisma.specialistsWhereInput = {
-      ...(is_active !== undefined && { is_active }),
-      ...(search && { name: { contains: search, mode: 'insensitive' } }),
-    };
+    // Filter hanya ditambahkan jika diisi dari query
+    const where: Prisma.specialistsWhereInput = {};
+    if (is_active !== undefined) {
+      where.is_active = is_active;
+    }
+    if (search) {
+      where.name = { contains: search, mode: 'insensitive' };
+    }
 
     const [specialists, total] = await Promise.all([
       prisma.specialists.findMany({
@@ -82,11 +87,12 @@ export class SpecialistService {
   static async delete({ params }: specialistIdRequest) {
     const specialist = await this.findOrFail(params.id);
 
-    if (specialist._count.doctors)
+    if (specialist._count.doctors) {
       throw new AppError(
         409,
         'specialist is still used by doctors; deactivate instead',
       );
+    }
 
     return await prisma.specialists.delete({ where: { id: params.id } });
   }

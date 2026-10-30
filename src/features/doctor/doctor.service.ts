@@ -73,8 +73,9 @@ export class DoctorService {
     const findUserByPhone = await prisma.user.findUnique({
       where: { phone_number },
     });
-    if (findUserByPhone)
+    if (findUserByPhone) {
       throw new AppError(409, 'phone number already registered');
+    }
 
     await this.assertSpecialistExists(specialist_id);
 
@@ -82,22 +83,25 @@ export class DoctorService {
 
     // Nested create: user + doctor dibuat dalam satu transaksi,
     // bila salah satu gagal keduanya batal
-    return await prisma.doctors.create({
-      data: {
-        ...doctor,
-        ...(specialist_id && { specialists: { connect: { id: specialist_id } } }),
-        users: {
-          create: {
-            email,
-            phone_number,
-            full_name: doctor.full_name,
-            password: hashedPassword,
-            role: 'DOCTOR',
-          },
+    const data: Prisma.doctorsCreateInput = {
+      ...doctor,
+      users: {
+        create: {
+          email,
+          phone_number,
+          full_name: doctor.full_name,
+          password: hashedPassword,
+          role: 'DOCTOR',
         },
       },
-      include: doctorInclude,
-    });
+    };
+
+    // Spesialis opsional: hanya dihubungkan jika dipilih
+    if (specialist_id) {
+      data.specialists = { connect: { id: specialist_id } };
+    }
+
+    return await prisma.doctors.create({ data, include: doctorInclude });
   }
 
   static async getAll({ query }: getDoctorsRequest) {
@@ -113,23 +117,26 @@ export class DoctorService {
       sort,
     } = query;
 
-    const where: Prisma.doctorsWhereInput = {
-      ...(is_active !== undefined && { is_active }),
-      ...(specialist_id && { specialist_id }),
-      ...(search && {
-        full_name: { contains: search, mode: 'insensitive' },
-      }),
-      ...((min_fee !== undefined || max_fee !== undefined) && {
-        consultation_fee: {
-          ...(min_fee !== undefined && { gte: min_fee }),
-          ...(max_fee !== undefined && { lte: max_fee }),
-        },
-      }),
-      // Dokter yang punya jadwal aktif di hari tersebut
-      ...(day_of_week !== undefined && {
-        doctor_schedules: { some: { day_of_week, is_active: true } },
-      }),
-    };
+    // Filter hanya ditambahkan jika diisi dari query
+    const where: Prisma.doctorsWhereInput = {};
+
+    if (is_active !== undefined) {
+      where.is_active = is_active;
+    }
+    if (specialist_id) {
+      where.specialist_id = specialist_id;
+    }
+    if (search) {
+      where.full_name = { contains: search, mode: 'insensitive' };
+    }
+    // Rentang biaya: gte = minimal, lte = maksimal (undefined diabaikan Prisma)
+    if (min_fee !== undefined || max_fee !== undefined) {
+      where.consultation_fee = { gte: min_fee, lte: max_fee };
+    }
+    // Dokter yang punya jadwal aktif di hari tersebut
+    if (day_of_week !== undefined) {
+      where.doctor_schedules = { some: { day_of_week, is_active: true } };
+    }
 
     const [doctors, total] = await Promise.all([
       prisma.doctors.findMany({
@@ -152,11 +159,11 @@ export class DoctorService {
   static async uploadPhoto(file?: Express.Multer.File) {
     if (!file) throw new AppError(422, 'Photo image is required');
 
-    const extension = file.mimetype.split('/')[1];
-    const url = await Storage.upload(
-      `doctors/${Date.now()}-${randomBytes(4).toString('hex')}.${extension}`,
-      file,
-    );
+    // Nama file unik, contoh: "doctors/1761800000000-a1b2c3d4.png"
+    const extension = file.mimetype.split('/')[1]; // "image/png" → "png"
+    const randomPart = randomBytes(4).toString('hex');
+    const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
+    const url = await Storage.upload(fileName, file);
 
     return { url };
   }
@@ -183,10 +190,16 @@ export class DoctorService {
       }),
     ]);
 
+    // Rata-rata rating dibulatkan 1 angka di belakang koma, null jika belum ada rating
     const avg = summary._avg.rating;
+    let ratingAvg: number | null = null;
+    if (avg !== null) {
+      ratingAvg = Number(avg.toFixed(1));
+    }
+
     return {
       ...doctor,
-      rating_avg: avg === null ? null : Number(avg.toFixed(1)),
+      rating_avg: ratingAvg,
       rating_count: summary._count.rating,
       reviews,
     };
@@ -198,21 +211,25 @@ export class DoctorService {
 
     const { specialist_id, ...doctor } = body;
 
+    const data: Prisma.doctorsUpdateInput = { ...doctor };
+
+    // Spesialis: id = hubungkan, null = lepaskan, undefined = tidak diubah
+    if (specialist_id !== undefined) {
+      if (specialist_id) {
+        data.specialists = { connect: { id: specialist_id } };
+      } else {
+        data.specialists = { disconnect: true };
+      }
+    }
+
+    // Nama di akun user ikut diperbarui agar tetap sama
+    if (body.full_name) {
+      data.users = { update: { full_name: body.full_name } };
+    }
+
     return await prisma.doctors.update({
       where: { id: params.id },
-      data: {
-        ...doctor,
-        // null melepas spesialis, undefined tidak mengubah
-        ...(specialist_id !== undefined && {
-          specialists: specialist_id
-            ? { connect: { id: specialist_id } }
-            : { disconnect: true },
-        }),
-        // Nama di akun user ikut diperbarui agar tetap sama
-        ...(body.full_name && {
-          users: { update: { full_name: body.full_name } },
-        }),
-      },
+      data,
       include: doctorInclude,
     });
   }
@@ -226,11 +243,12 @@ export class DoctorService {
       prisma.ratings.count({ where: { doctor_id: params.id } }),
     ]);
 
-    if (appointments || sessions || ratings)
+    if (appointments || sessions || ratings) {
       throw new AppError(
         409,
         'doctor still has appointments, sessions, or ratings; deactivate instead',
       );
+    }
 
     return await prisma.doctors.delete({ where: { id: params.id } });
   }
