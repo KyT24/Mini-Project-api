@@ -7,3 +7,5 @@ export class AppError extends Error {
     this.status = status;
   }
 }
+
+throw new AppError(404, "QR code is not valid");
