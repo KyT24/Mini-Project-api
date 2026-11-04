@@ -9,20 +9,27 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.Storage = void 0;
+exports.Storage = exports.getSupabaseClient = void 0;
 require("dotenv/config");
 const supabase_js_1 = require("@supabase/supabase-js");
 const app_error_1 = require("../errors/app.error");
-// Pakai service role key (hanya di server) agar bisa menulis ke bucket
-const getClient = () => {
-    const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-        throw new app_error_1.AppError(500, 'file storage is not configured');
+// Pakai service role key atau anon/publishable key agar bisa membaca/menulis ke Supabase & bucket
+const getSupabaseClient = () => {
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.SUPABASE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) {
+        throw new app_error_1.AppError(500, 'Supabase URL or Key is not configured');
     }
-    return (0, supabase_js_1.createClient)(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    return (0, supabase_js_1.createClient)(url, key, {
         auth: { persistSession: false },
     });
 };
+exports.getSupabaseClient = getSupabaseClient;
+const getClient = exports.getSupabaseClient;
 class Storage {
     // Unggah buffer lalu kembalikan URL publiknya
     static uploadBuffer(path, buffer, contentType) {
