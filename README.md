@@ -17,10 +17,12 @@ Built with **Node.js**, **Express 5**, **TypeScript**, **Prisma ORM 7 (PostgreSQ
 - [Environment Variables](#environment-variables)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
-  - [Installation](#installation)
-  - [Database Setup & Migrations](#database-setup--migrations)
-  - [Data Seeding](#data-seeding)
-  - [Running the App](#running-the-app)
+  - [1. Environment Configuration](#1-environment-configuration)
+  - [2. Installation](#2-installation)
+  - [3. Generate Prisma Client](#3-generate-prisma-client)
+  - [4. Running the Application](#4-running-the-application)
+  - [5. Verification & Testing](#5-verification--testing)
+  - [Demo Accounts](#demo-accounts)
 - [API Reference](#api-reference)
   - [Authentication (`/api/v1/auth`)](#authentication-apiv1auth)
   - [Specialists (`/api/v1/specialists`)](#specialists-apiv1specialists)
@@ -29,7 +31,10 @@ Built with **Node.js**, **Express 5**, **TypeScript**, **Prisma ORM 7 (PostgreSQ
   - [Patient Profile (`/api/v1/patients`)](#patient-profile-apiv1patients)
   - [Appointments - Patient (`/api/v1/appointments`)](#appointments---patient-apiv1appointments)
   - [Appointments - Admin (`/api/v1/admin/appointments`)](#appointments---admin-apiv1adminappointments)
-- [Integration Roadmap with Frontend Platform](#integration-roadmap-with-frontend-platform)
+  - [Live Queue & TV Display (`/api/v1/queue`)](#live-queue--tv-display-apiv1queue)
+  - [Queue Operations - Admin (`/api/v1/admin/queue`)](#queue-operations---admin-apiv1adminqueue)
+  - [Dashboard & Analytics - Admin (`/api/v1/admin/dashboard`)](#dashboard--analytics---admin-apiv1admindashboard)
+- [Frontend Integration & Unified Database](#frontend-integration--unified-database)
 - [Deployment](#deployment)
 - [License](#license)
 
@@ -207,54 +212,126 @@ cp example.env .env
 
 ### Prerequisites
 - **Node.js** v18 or higher (v20+ recommended)
-- **PostgreSQL** database (Local or Supabase)
-- **Supabase Account** (for Storage bucket access)
+- **PostgreSQL** database (Local instance or Supabase Project)
+- **Supabase Project** (Storage bucket & shared authentication database)
 
-### Installation
-Clone the repository and install dependencies:
+---
+
+### 1. Environment Configuration
+Duplicate `example.env` into `.env`:
+
+```bash
+cp example.env .env
+```
+
+Ensure the values in `.env` match your Supabase project (sesuai yang digunakan oleh frontend `clinic-appointment-platform`):
+
+```env
+# ---------- Application ----------
+NODE_ENV='DEVELOPMENT'
+PORT=8000
+API_PREFIX=/api/v1
+ALLOWED_ORIGINS=http://localhost:3000
+
+# ---------- Database (PostgreSQL / Supabase) ----------
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+DIRECT_URL="postgresql://postgres:postgres@localhost:5432/postgres"
+
+# ---------- Auth ----------
+JWT_SECRET_KEY=94c502da5df3890f666f358ad7d9ba66723b7b4a20b0ddf5170d47aa28f747eb
+
+# ---------- Supabase Project & Storage ----------
+SUPABASE_URL=https://wewieruvgvxupjndagnb.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=sb_publishable_zdn0kiwPWaQXJciMAhVjFg_VbsdN6Eg
+SUPABASE_BUCKET=payment-proofs
+```
+
+---
+
+### 2. Installation
+Install all required Node.js package dependencies:
 
 ```bash
 npm install
 ```
 
-### Database Setup & Migrations
-Ensure `DATABASE_URL` in your `.env` points to your PostgreSQL instance, then run:
+---
+
+### 3. Generate Prisma Client
+Generate the type-safe Prisma Client bindings:
 
 ```bash
-# Generate Prisma Client
 npx prisma generate
-
-# Apply migrations
-npx prisma migrate deploy
-# Or for local development:
-# npx prisma migrate dev
 ```
 
-### Data Seeding
-Populate the database with initial clinic data:
-
+*(Opsional bila menggunakan database PostgreSQL lokal)*:
 ```bash
-# 1. Seed initial administrator
-npm run seed:admin
-
-# 2. Seed treatments catalog
-npm run seed:treatments
+# Jalankan migrasi schema jika menggunakan database PostgreSQL lokal
+npx prisma migrate dev
 ```
 
-### Running the App
+---
+
+### 4. Running the Application
+
+Anda dapat menjalankan backend ini dalam dua mode:
+
+#### Option A: Development Mode (Hot-Reload)
+Menggunakan `nodemon` dan `ts-node` untuk restart otomatis saat file kode berubah:
 
 ```bash
-# Development mode (nodemon + ts-node)
 npm run dev
+```
 
-# Build TypeScript to JavaScript
+#### Option B: Production Mode (Compiled JS)
+Mengkompilasi TypeScript ke folder `dist/` dan menjalankannya dengan Node runtime murni:
+
+```bash
+# 1. Compile TypeScript ke JavaScript
 npm run build
 
-# Start production build
+# 2. Jalankan server production
 npm start
 ```
 
-The server will be accessible at `http://localhost:8000/api/v1`.
+Setelah server aktif, Anda akan melihat log:
+```text
+Application Running on PORT: 8000
+```
+Base API siap diakses pada: `http://localhost:8000/api/v1`.
+
+---
+
+### 5. Verification & Testing
+
+Untuk memastikan server berjalan dan dapat berkomunikasi dengan database:
+
+```bash
+# 1. Cek direktori dokter (publik)
+curl -s http://localhost:8000/api/v1/doctors
+
+# 2. Cek monitor antrean live TV (publik)
+curl -s http://localhost:8000/api/v1/queue/live
+
+# 3. Test login admin
+curl -s -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@klinik.test","password":"Admin123!"}'
+```
+
+---
+
+### 👥 Demo Accounts
+
+Database bersama telah dilengkapi dengan akun demo siap pakai:
+
+| Role | Email | Password | Akses & Wewenang |
+| :--- | :--- | :--- | :--- |
+| **ADMIN** | `admin@klinik.test` | `Admin123!` | Akses admin klinik, verifikasi bukti bayar, QR check-in hari H, panggil antrean (*call next*), dashboard statistik |
+| **PATIENT** | `pasien@klinik.test` | `Pasien123!` | Akses pasien, booking jadwal konsultasi, upload struk pembayaran, melihat antrean aktif & ulasan |
+
+> 📖 **Koleksi cURL Lengkap**:  
+> Seluruh endpoint REST API Express telah didokumentasikan secara rinci beserta contoh cURL di file [`API.md`](API.md).
 
 ---
 
@@ -411,27 +488,41 @@ Manages weekly recurring practice hours for doctors.
 
 ---
 
-## 🗺️ Integration Roadmap with Frontend Platform
+### Live Queue & TV Display (`/api/v1/queue`)
 
-A detailed technical gap analysis and synchronization plan has been established to connect this API with the Next.js 16 frontend (`/clinic-appointment-platform`) using a **single unified PostgreSQL (Supabase) database**.
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/live` | Public | Live stream/poll for waiting room TV display with current serving and next 3 patients |
 
-> 📖 **Full Specification:** See [`plans/01-plan-frontend-integration-20261104.md`](file:///Users/oktaviardi/Okta/api-clinic-appointment/plans/01-plan-frontend-integration-20261104.md)
+---
 
-### Upcoming Harmonization & Endpoints:
-1. **Database Schema Harmonization**:
-   - Align Prisma models with the active Supabase schema (`profiles`, `doctors` without mandatory `user_id`, `practice_sessions` with direct `current_queue_number`).
-   - Unified `appointments` table tracking `code`, `payment_proof_path`, `confirmed_at`, `checked_in_at`, and `is_no_show`.
-2. **On-Site QR Check-in Pipeline (`/api/v1/admin/queue/check-in`)**:
-   - Clinic staff scans patient QR code on appointment day.
-   - Validates session date matches today (WIB) and assigns sequential arrival `queue_number` (`MAX + 1`).
-3. **Live Queue & TV Display (`/api/v1/queue/live`)**:
-   - Feeds real-time waiting room TV displays (`/queue`) with current serving number and upcoming numbers.
-4. **Queue Calling & No-Show Controls**:
-   - `PATCH /api/v1/admin/queue/call-next`: Advance queue to next waiting patient.
-   - `PATCH /api/v1/admin/appointments/:id/no-show`: Mark unarrived patients as no-show.
-5. **Admin Dashboard Metrics & Statistics**:
-   - `GET /api/v1/admin/dashboard/metrics`: Daily operational overview.
-   - `GET /api/v1/admin/dashboard/stats`: Aggregated charting endpoints (day/month/year) for Recharts visualizer.
+### Queue Operations - Admin (`/api/v1/admin/queue`)
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/check-in` | Admin | Safe idempotent on-site check-in with QR scan or appointment code (issues sequential arrival queue number) |
+| `PATCH` | `/call-next` | Admin | Advance current serving queue number to next waiting patient |
+| `PATCH` | `/no-show/:id` | Admin | Mark unarrived patient appointment as no-show |
+
+---
+
+### Dashboard & Analytics - Admin (`/api/v1/admin/dashboard`)
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/metrics` | Admin | Real-time overview metrics: today's appointments, waiting queue, pending verification, and estimated revenue |
+| `GET` | `/stats` | Admin | Time-series charting data (`?period=day|month|year&from=...&to=...&doctor_id=...`) for Recharts visualizer |
+
+---
+
+## 🔗 Frontend Integration & Unified Database
+
+Backend Express API ini terintegrasi penuh dan berbagi basis data PostgreSQL yang sama dengan frontend Next.js 16 (`clinic-appointment-platform`).
+
+- **Unified PostgreSQL Schema**: Mengakses tabel `profiles`, `doctors`, `practice_sessions`, `appointments`, dan `ratings`.
+- **Media Upload Multi-Channel**: Mendukung upload bukti transfer via file multipart maupun payload Base64 Data URL.
+- **Full cURL Documentation**: Lihat [`API.md`](API.md) untuk panduan pengujian dan integrasi endpoint.
+- **Rencana Teknis**: Lihat [`plans/01-plan-frontend-integration-20261104.md`](plans/01-plan-frontend-integration-20261104.md) untuk ringkasan migrasi dan harmonisasi.
 
 ---
 
