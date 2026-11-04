@@ -19,7 +19,8 @@ const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
     if (!token)
         throw new app_error_1.AppError(401, 'Unauthorized');
     try {
-        res.locals.auth = (yield jwt_lib_1.Jwt.verify(token, process.env.JWT_SECRET_KEY));
+        const payload = yield jwt_lib_1.Jwt.verify(token, process.env.JWT_SECRET_KEY);
+        res.locals.auth = payload;
     }
     catch (_b) {
         throw new app_error_1.AppError(401, 'Session expired, please login again');
@@ -28,10 +29,14 @@ const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.verifyToken = verifyToken;
 // Pakai setelah verifyToken: tolak bila role tidak ada di daftar
-const verifyRole = (...roles) => (req, res, next) => {
-    const auth = res.locals.auth;
-    if (!auth || !roles.includes(auth.role))
-        throw new app_error_1.AppError(403, 'Forbidden');
-    next();
+// Contoh: verifyRole('ADMIN', 'STAFF') → menghasilkan middleware untuk route
+const verifyRole = (...roles) => {
+    return (req, res, next) => {
+        const auth = res.locals.auth;
+        if (!auth || !roles.includes(auth.role)) {
+            throw new app_error_1.AppError(403, 'Forbidden');
+        }
+        next();
+    };
 };
 exports.verifyRole = verifyRole;

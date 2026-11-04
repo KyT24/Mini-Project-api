@@ -10,28 +10,33 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 // Isi tabel treatments dari daftar treatment di frontend
-// (Mini-Project-app/src/components/user/landing-page/treatment.ts).
-// Jalankan: npm run seed:treatments. Data yang sudah ada tidak ditimpa.
+// (Mini-Project-app/src/constants/treatments.ts).
+// Jalankan: npm run seed:treatments. Treatment yang sudah ada diperbarui harganya.
 require("dotenv/config");
 const prisma_client_config_1 = require("../configs/prisma-client.config");
-// TODO: ganti harga & durasi dengan data asli klinik
-const DEFAULT_PRICE = 0;
+// TODO: ganti durasi dengan data asli klinik
 const DEFAULT_DURATION_MINUTES = 60;
+// Harga dalam Rupiah
 const treatments = [
-    { slug: 'acne-dermapeel', name: 'Acne Dermapeel' },
-    { slug: 'ipl-acne', name: 'IPL Acne' },
-    { slug: 'acne-laser-co2', name: 'Acne Laser Co2' },
-    { slug: 'acne-facial', name: 'Acne Facial' },
-    { slug: 'brightening-facial', name: 'Brightening Facial' },
-    { slug: 'glow-peeling', name: 'Glow Peeling' },
-    { slug: 'vitamin-c-infusion', name: 'Vitamin C Infusion' },
-    { slug: 'anti-aging-facial', name: 'Anti-Aging Facial' },
-    { slug: 'skin-booster', name: 'Skin Booster' },
-    { slug: 'rf-lifting', name: 'RF Lifting' },
-    { slug: 'hair-treatment', name: 'Hair Treatment' },
-    { slug: 'laser-hair-removal', name: 'Laser Hair Removal' },
-    { slug: 'body-slimming', name: 'Body Slimming' },
-    { slug: 'body-contouring', name: 'Body Contouring' },
+    // Acne & Scar
+    { slug: 'acne-dermapeel', name: 'Acne Dermapeel', price: 400000 },
+    { slug: 'ipl-acne', name: 'IPL Acne', price: 550000 },
+    { slug: 'acne-laser-co2', name: 'Acne Laser Co2', price: 1800000 },
+    { slug: 'acne-facial', name: 'Acne Facial', price: 250000 },
+    // Brightening
+    { slug: 'brightening-facial', name: 'Brightening Facial', price: 300000 },
+    { slug: 'glow-peeling', name: 'Glow Peeling', price: 350000 },
+    { slug: 'vitamin-c-infusion', name: 'Vitamin C Infusion', price: 450000 },
+    // Anti-Aging
+    { slug: 'anti-aging-facial', name: 'Anti-Aging Facial', price: 400000 },
+    { slug: 'skin-booster', name: 'Skin Booster', price: 1500000 },
+    { slug: 'rf-lifting', name: 'RF Lifting', price: 1200000 },
+    // Hair
+    { slug: 'hair-treatment', name: 'Hair Treatment', price: 350000 },
+    { slug: 'laser-hair-removal', name: 'Laser Hair Removal', price: 600000 },
+    // Slimming
+    { slug: 'body-slimming', name: 'Body Slimming', price: 500000 },
+    { slug: 'body-contouring', name: 'Body Contouring', price: 1500000 },
 ];
 function main() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -40,14 +45,19 @@ function main() {
             const existing = yield prisma_client_config_1.prisma.treatments.findUnique({
                 where: { slug: treatment.slug },
             });
-            if (existing)
+            if (existing) {
+                yield prisma_client_config_1.prisma.treatments.update({
+                    where: { slug: treatment.slug },
+                    data: { price: treatment.price },
+                });
                 continue;
+            }
             yield prisma_client_config_1.prisma.treatments.create({
-                data: Object.assign(Object.assign({}, treatment), { price: DEFAULT_PRICE, duration_minutes: DEFAULT_DURATION_MINUTES }),
+                data: Object.assign(Object.assign({}, treatment), { duration_minutes: DEFAULT_DURATION_MINUTES }),
             });
             created++;
         }
-        console.log(`${created} treatment dibuat, ${treatments.length - created} sudah ada.`);
+        console.log(`${created} treatment dibuat, ${treatments.length - created} diperbarui harganya.`);
     });
 }
 main()

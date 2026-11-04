@@ -34,26 +34,33 @@ model appointments {
   patient_id            String
   doctor_id             String
   session_id            String
-  treatment_id          String
+  treatment_id          String?
   patient_membership_id String?
   appointment_code      String               @unique @db.VarChar(50)
+  code                  String?              @db.VarChar(50)
   consultation_fee      Decimal              @db.Decimal(12, 2)
-  treatment_fee         Decimal              @db.Decimal(12, 2)
+  treatment_fee         Decimal              @default(0) @db.Decimal(12, 2)
   discount_amount       Decimal              @default(0) @db.Decimal(12, 2)
-  total_amount          Decimal              @db.Decimal(12, 2)
+  total_amount          Decimal              @default(0) @db.Decimal(12, 2)
   // 6 status transaksi sesuai requirement (menggantikan appointment_status + payment_status)
   status                transaction_status   @default(waiting_payment)
   payment_deadline      DateTime?            @db.Timestamp(6)
+  payment_proof_path    String?
+  payment_uploaded_at   DateTime?            @db.Timestamp(6)
+  rejection_reason      String?
+  confirmed_at          DateTime?            @db.Timestamp(6)
+  booking_number        Int?
   queue_number          Int?
   checked_in_at         DateTime?            @db.Timestamp(6)
   qr_token              String?              @unique @db.VarChar(255)
+  is_no_show            Boolean              @default(false)
   created_at            DateTime             @default(now()) @db.Timestamp(6)
   updated_at            DateTime             @updatedAt @db.Timestamp(6)
   doctors               doctors              @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
   patient_profiles      patient_profiles     @relation(fields: [patient_id], references: [id], onDelete: Restrict)
   patient_memberships   patient_memberships? @relation(fields: [patient_membership_id], references: [id], onDelete: SetNull)
   practice_sessions     practice_sessions    @relation(fields: [session_id], references: [id], onDelete: Restrict)
-  treatments            treatments           @relation(fields: [treatment_id], references: [id], onDelete: Restrict)
+  treatments            treatments?          @relation(fields: [treatment_id], references: [id], onDelete: SetNull)
   check_ins             check_ins?
   payment_proofs        payment_proofs[]
   ratings               ratings?
@@ -92,12 +99,13 @@ model doctor_treatments {
 
 model doctors {
   id                String              @id @default(uuid())
-  user_id           String              @unique
+  user_id           String?             @unique
   full_name         String              @db.VarChar(150)
   bio               String?
   experience_years  Int                 @default(0)
   consultation_fee  Decimal             @default(0) @db.Decimal(12, 2)
   photo             String?             @db.VarChar(255)
+  photo_url         String?             @db.VarChar(255)
   specialist_id     String?
   is_active         Boolean             @default(true)
   created_at        DateTime            @default(now()) @db.Timestamp(6)
@@ -105,7 +113,7 @@ model doctors {
   appointments      appointments[]
   doctor_schedules  doctor_schedules[]
   doctor_treatments doctor_treatments[]
-  users             user                @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  users             user?               @relation(fields: [user_id], references: [id], onDelete: SetNull)
   specialists       specialists?        @relation(fields: [specialist_id], references: [id], onDelete: Restrict)
   practice_sessions practice_sessions[]
   ratings           ratings[]
@@ -221,18 +229,22 @@ model payment_proofs {
 }
 
 model practice_sessions {
-  id             String          @id @default(uuid())
-  doctor_id      String
-  session_date   DateTime        @db.Date
-  start_time     DateTime        @db.Time(6)
-  end_time       DateTime        @db.Time(6)
-  patient_quota  Int
-  status         session_status  @default(scheduled)
-  created_at     DateTime        @default(now()) @db.Timestamp(6)
-  updated_at     DateTime        @updatedAt @db.Timestamp(6)
-  appointments   appointments[]
-  doctors        doctors         @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
-  session_queues session_queues?
+  id                   String          @id @default(uuid())
+  doctor_id            String
+  schedule_id          String?
+  session_date         DateTime        @db.Date
+  start_time           DateTime        @db.Time(6)
+  end_time             DateTime        @db.Time(6)
+  starts_at            DateTime?       @db.Timestamp(6)
+  ends_at              DateTime?       @db.Timestamp(6)
+  patient_quota        Int
+  current_queue_number Int             @default(0)
+  status               session_status  @default(scheduled)
+  created_at           DateTime        @default(now()) @db.Timestamp(6)
+  updated_at           DateTime        @updatedAt @db.Timestamp(6)
+  appointments         appointments[]
+  doctors              doctors         @relation(fields: [doctor_id], references: [id], onDelete: Restrict)
+  session_queues       session_queues?
 
   @@unique([doctor_id, session_date, start_time])
   @@index([session_date, status])

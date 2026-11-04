@@ -64,9 +64,14 @@ class AppointmentController {
     }
     static uploadPaymentProof(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
             const { params } = (0, validate_1.validate)(appointment_validator_1.appointmentIdSchema, { params: req.params });
             const auth = res.locals.auth;
-            const appointment = yield appointment_service_1.AppointmentService.uploadPaymentProof(auth.id, { params }, req.file);
+            const imageBase64 = ((_a = req.body) === null || _a === void 0 ? void 0 : _a.image_base64) ||
+                (typeof ((_b = req.body) === null || _b === void 0 ? void 0 : _b.image) === 'string' && req.body.image.startsWith('data:image')
+                    ? req.body.image
+                    : undefined);
+            const appointment = yield appointment_service_1.AppointmentService.uploadPaymentProof(auth.id, { params }, req.file, imageBase64);
             res.status(200).json({
                 success: true,
                 message: 'payment proof uploaded successfully',

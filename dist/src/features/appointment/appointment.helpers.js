@@ -38,16 +38,21 @@ exports.appointmentInclude = {
 const slotStartsAt = (date, time) => new Date(`${date}T${time}:00${appointment_constants_1.CLINIC_UTC_OFFSET}`);
 exports.slotStartsAt = slotStartsAt;
 // Tanggal & jam sekarang di zona waktu klinik: { date: 'YYYY-MM-DD', time: 'HH:mm' }
+// WIB = UTC + 7 jam (dalam milidetik)
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
 const clinicNow = () => {
-    const iso = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString();
-    return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+    const nowInWib = new Date(Date.now() + WIB_OFFSET_MS);
+    const iso = nowInWib.toISOString(); // contoh: "2026-10-30T14:05:00.000Z"
+    const date = iso.slice(0, 10); // "2026-10-30"
+    const time = iso.slice(11, 16); // "14:05"
+    return { date, time };
 };
 exports.clinicNow = clinicNow;
 // Kolom @db.Date sesi → "YYYY-MM-DD"
 const sessionDateOf = (session) => session.session_date.toISOString().slice(0, 10);
-const sessionStartsAt = (s) => (0, exports.slotStartsAt)(sessionDateOf(s), (0, time_lib_1.fromDbTime)(s.start_time));
+const sessionStartsAt = (session) => (0, exports.slotStartsAt)(sessionDateOf(session), (0, time_lib_1.fromDbTime)(session.start_time));
 exports.sessionStartsAt = sessionStartsAt;
-const sessionEndsAt = (s) => (0, exports.slotStartsAt)(sessionDateOf(s), (0, time_lib_1.fromDbTime)(s.end_time));
+const sessionEndsAt = (session) => (0, exports.slotStartsAt)(sessionDateOf(session), (0, time_lib_1.fromDbTime)(session.end_time));
 exports.sessionEndsAt = sessionEndsAt;
 // Janji temu yang memakai kuota: sudah bayar / menunggu konfirmasi,
 // atau belum bayar tapi batas waktunya belum lewat
@@ -95,11 +100,14 @@ function shiftQueueUp(tx, sessionId, from) {
             orderBy: { queue_number: 'asc' },
             select: { id: true, queue_number: true },
         });
-        for (const a of behind)
+        for (const appointment of behind) {
+            // queue_number pasti terisi karena sudah difilter "gt: from" di atas
+            const newQueueNumber = appointment.queue_number - 1;
             yield tx.appointments.update({
-                where: { id: a.id },
-                data: { queue_number: a.queue_number - 1 },
+                where: { id: appointment.id },
+                data: { queue_number: newQueueNumber },
             });
+        }
     });
 }
 // Tambahan yang dihitung server: sisa waktu bayar & aksi yang boleh dilakukan pasien.
@@ -108,13 +116,20 @@ function describe(appointment) {
     const now = Date.now();
     const session = appointment.practice_sessions;
     const started = (0, exports.sessionStartsAt)(session).getTime() <= now;
-    const remaining_seconds = appointment.status === 'waiting_payment' && appointment.payment_deadline
-        ? Math.max(Math.floor((appointment.payment_deadline.getTime() - now) / 1000), 0)
-        : 0;
-    return Object.assign(Object.assign({}, appointment), { remaining_seconds, can_cancel: !started &&
-            (appointment.status === 'done' ||
-                appointment.status === 'waiting_confirmation' ||
-                (appointment.status === 'waiting_payment' && remaining_seconds > 0)), can_rate: appointment.status === 'done' &&
-            !appointment.ratings &&
-            (0, exports.sessionEndsAt)(session).getTime() <= now });
+    const ended = (0, exports.sessionEndsAt)(session).getTime() <= now;
+    // Sisa waktu bayar (detik), hanya untuk status waiting_payment. Tidak boleh minus
+    let remaining_seconds = 0;
+    if (appointment.status === 'waiting_payment' && appointment.payment_deadline) {
+        const remainingMs = appointment.payment_deadline.getTime() - now;
+        remaining_seconds = Math.max(Math.floor(remainingMs / 1000), 0);
+    }
+    // Boleh dibatalkan selama sesi belum mulai, dan statusnya masih aktif
+    const isPaidOrWaitingConfirmation = appointment.status === 'done' || appointment.status === 'waiting_confirmation';
+    const isWaitingPaymentInTime = appointment.status === 'waiting_payment' && remaining_seconds > 0;
+    const can_cancel = !started && (isPaidOrWaitingConfirmation || isWaitingPaymentInTime);
+    // Boleh diberi rating jika sudah done, belum pernah dirating, dan sesi sudah selesai
+    const can_rate = appointment.status === 'done' && !appointment.ratings && ended;
+    return Object.assign(Object.assign({}, appointment), { remaining_seconds,
+        can_cancel,
+        can_rate });
 }

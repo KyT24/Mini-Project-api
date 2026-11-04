@@ -67,10 +67,17 @@ export class AppointmentController {
     const { params } = validate(appointmentIdSchema, { params: req.params });
     const auth = res.locals.auth as TAuthPayload;
 
+    const imageBase64 =
+      req.body?.image_base64 ||
+      (typeof req.body?.image === 'string' && req.body.image.startsWith('data:image')
+        ? req.body.image
+        : undefined);
+
     const appointment = await AppointmentService.uploadPaymentProof(
       auth.id,
       { params },
       req.file,
+      imageBase64,
     );
 
     res.status(200).json({

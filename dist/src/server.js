@@ -16,12 +16,15 @@ const appointment_route_1 = require("./features/appointment/appointment.route");
 const appointment_admin_route_1 = require("./features/appointment/appointment-admin.route");
 const patient_route_1 = require("./features/patient/patient.route");
 const schedule_route_1 = require("./features/schedule/schedule.route");
+const queue_route_1 = require("./features/queue/queue.route");
+const dashboard_route_1 = require("./features/dashboard/dashboard.route");
 const app_error_1 = require("./errors/app.error");
 const PORT = parseInt(process.env.PORT);
 const API_PREFIX = process.env.API_PREFIX;
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)(cors_config_1.corsOptions));
-app.use(express_1.default.json());
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use((0, cookie_parser_1.default)());
 app.use(error_middleware_1.errorMiddleware);
 app.use(`${API_PREFIX}/auth`, auth_route_1.AuthRouter);
@@ -31,19 +34,24 @@ app.use(`${API_PREFIX}/appointments`, appointment_route_1.appointmentRouter);
 app.use(`${API_PREFIX}/admin/appointments`, appointment_admin_route_1.adminAppointmentRouter);
 app.use(`${API_PREFIX}/patients`, patient_route_1.patientRouter);
 app.use(`${API_PREFIX}/schedules`, schedule_route_1.scheduleRouter);
+app.use(`${API_PREFIX}/queue`, queue_route_1.queueRouter);
+app.use(`${API_PREFIX}/admin/queue`, queue_route_1.adminQueueRouter);
+app.use(`${API_PREFIX}/admin/dashboard`, dashboard_route_1.adminDashboardRouter);
 app.use((error, req, res, next) => {
-    if (error instanceof app_error_1.AppError)
+    if (error instanceof app_error_1.AppError) {
         return res.status(error.status).json({
             success: false,
             message: error.message,
             data: {},
         });
-    if (error instanceof Error)
+    }
+    if (error instanceof Error) {
         return res.status(500).json({
             success: false,
             message: error === null || error === void 0 ? void 0 : error.message,
             data: {},
         });
+    }
 });
 /* Centralized Error */
 if (process.env.NODE_ENV === 'DEVELOPMENT') {

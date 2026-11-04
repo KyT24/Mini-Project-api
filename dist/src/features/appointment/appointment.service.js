@@ -17,19 +17,26 @@ const supabase_lib_1 = require("../../lib/supabase.lib");
 const time_lib_1 = require("../../lib/time.lib");
 const appointment_constants_1 = require("./appointment.constants");
 const appointment_helpers_1 = require("./appointment.helpers");
+// "2026-10-30" + 3 hari → "2026-11-02"
 const addDays = (date, days) => {
-    const d = new Date(`${date}T00:00:00Z`);
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().slice(0, 10);
+    const result = new Date(`${date}T00:00:00Z`);
+    result.setUTCDate(result.getUTCDate() + days);
+    return result.toISOString().slice(0, 10);
 };
-const generateCode = (date) => `APT-${date.replace(/-/g, '')}-${(0, crypto_1.randomBytes)(3).toString('hex').toUpperCase()}`;
+// Kode reservasi, contoh: "APT-20261030-A1B2C3"
+const generateCode = (date) => {
+    const dateWithoutDash = date.replace(/-/g, ''); // "2026-10-30" → "20261030"
+    const randomPart = (0, crypto_1.randomBytes)(3).toString('hex').toUpperCase(); // 6 karakter acak
+    return `APT-${dateWithoutDash}-${randomPart}`;
+};
 // Status yang masih boleh dibatalkan pasien (selama sesi belum dimulai)
 const CANCELABLE = ['waiting_payment', 'waiting_confirmation', 'done'];
 class AppointmentService {
     static assertBookableDate(date) {
         const today = (0, appointment_helpers_1.clinicNow)().date;
-        if (date < today || date > addDays(today, appointment_constants_1.BOOKING_WINDOW_DAYS - 1))
+        if (date < today || date > addDays(today, appointment_constants_1.BOOKING_WINDOW_DAYS - 1)) {
             throw new app_error_1.AppError(422, `Schedule date must be within the next ${appointment_constants_1.BOOKING_WINDOW_DAYS} days`);
+        }
     }
     static findActiveDoctorOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -66,7 +73,7 @@ class AppointmentService {
             const slots = schedules.map((schedule) => {
                 var _a, _b, _c;
                 const start_time = (0, time_lib_1.fromDbTime)(schedule.start_time);
-                const session = sessions.find((s) => (0, time_lib_1.fromDbTime)(s.start_time) === start_time);
+                const session = sessions.find((item) => (0, time_lib_1.fromDbTime)(item.start_time) === start_time);
                 const quota = (_a = session === null || session === void 0 ? void 0 : session.patient_quota) !== null && _a !== void 0 ? _a : schedule.patient_quota;
                 const booked = (_b = session === null || session === void 0 ? void 0 : session._count.appointments) !== null && _b !== void 0 ? _b : 0;
                 const remaining = Math.max(quota - booked, 0);
@@ -95,8 +102,9 @@ class AppointmentService {
                 this.findActiveDoctorOrFail(doctor_id),
                 prisma_client_config_1.prisma.treatments.findUnique({ where: { slug: treatment_slug } }),
             ]);
-            if (!treatment || !treatment.is_active)
+            if (!treatment || !treatment.is_active) {
                 throw new app_error_1.AppError(404, 'treatment not found');
+            }
             // Jam yang dipesan harus ada di jadwal praktik dokter pada hari itu
             const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({
                 where: {
@@ -126,15 +134,19 @@ class AppointmentService {
                     },
                     create: {
                         doctor_id,
+                        schedule_id: schedule.id,
                         session_date: (0, time_lib_1.toDbDate)(session_date),
                         start_time: (0, time_lib_1.toDbTime)(start_time),
                         end_time: schedule.end_time,
+                        starts_at: startsAt,
                         patient_quota: schedule.patient_quota,
+                        current_queue_number: 0,
                     },
                     update: {},
                 });
-                if (session.status === 'canceled')
+                if (session.status === 'canceled') {
                     throw new app_error_1.AppError(409, 'Schedule has been canceled');
+                }
                 // Kunci baris sesi agar dua pasien tidak mengambil kuota terakhir bersamaan
                 yield (0, appointment_helpers_1.lockSession)(tx, session.id);
                 const now = new Date();
@@ -144,24 +156,30 @@ class AppointmentService {
                         where: Object.assign({ session_id: session.id, patient_id: patient.id }, (0, appointment_helpers_1.holdsQuota)(now)),
                     }),
                 ]);
-                if (ownBooking)
+                if (ownBooking) {
                     throw new app_error_1.AppError(409, 'You already have a booking on this schedule');
-                if (booked >= session.patient_quota)
+                }
+                if (booked >= session.patient_quota) {
                     throw new app_error_1.AppError(409, 'Doctor quota for this schedule is full');
+                }
                 const treatmentFee = treatment.price;
                 const consultationFee = doctor.consultation_fee;
+                // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
+                const holdUntil = now.getTime() + appointment_constants_1.PAYMENT_HOLD_MINUTES * 60 * 1000;
+                const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
+                const apptCode = generateCode(session_date);
                 return yield tx.appointments.create({
                     data: {
                         patient_id: patient.id,
                         doctor_id,
                         session_id: session.id,
                         treatment_id: treatment.id,
-                        appointment_code: generateCode(session_date),
+                        appointment_code: apptCode,
+                        code: apptCode,
                         consultation_fee: consultationFee,
                         treatment_fee: treatmentFee,
                         total_amount: consultationFee.add(treatmentFee),
-                        // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
-                        payment_deadline: new Date(Math.min(now.getTime() + appointment_constants_1.PAYMENT_HOLD_MINUTES * 60 * 1000, startsAt.getTime())),
+                        payment_deadline: paymentDeadline,
                     },
                     include: appointment_helpers_1.appointmentInclude,
                 });
@@ -212,17 +230,26 @@ class AppointmentService {
             return (0, appointment_helpers_1.describe)(yield this.findOwnOrFail(userId, params.id));
         });
     }
-    static uploadPaymentProof(userId_1, _a, file_1) {
-        return __awaiter(this, arguments, void 0, function* (userId, { params }, file) {
-            if (!file)
+    static uploadPaymentProof(userId_1, _a, file_1, imageBase64_1) {
+        return __awaiter(this, arguments, void 0, function* (userId, { params }, file, imageBase64) {
+            if (!file && !imageBase64)
                 throw new app_error_1.AppError(422, 'Payment proof image is required');
             const appointment = yield this.findOwnOrFail(userId, params.id);
-            if (appointment.status === 'expired')
+            if (appointment.status === 'expired') {
                 throw new app_error_1.AppError(410, 'Payment time has expired, please book again');
-            if (appointment.status !== 'waiting_payment')
+            }
+            if (appointment.status !== 'waiting_payment') {
                 throw new app_error_1.AppError(409, 'Payment proof has already been uploaded');
-            const extension = file.mimetype.split('/')[1];
-            const imageUrl = yield supabase_lib_1.Storage.upload(`${appointment.id}/${Date.now()}.${extension}`, file);
+            }
+            let imageUrl;
+            const pathPrefix = `${appointment.id}/${Date.now()}`;
+            if (file) {
+                const extension = file.mimetype.split('/')[1] || 'jpg';
+                imageUrl = yield supabase_lib_1.Storage.upload(`${pathPrefix}.${extension}`, file);
+            }
+            else {
+                imageUrl = yield supabase_lib_1.Storage.uploadBase64(`${pathPrefix}.jpg`, imageBase64);
+            }
             // Pastikan batas waktu belum lewat saat file selesai diunggah
             const updated = yield prisma_client_config_1.prisma.appointments.updateMany({
                 where: {
@@ -230,10 +257,15 @@ class AppointmentService {
                     status: 'waiting_payment',
                     payment_deadline: { gt: new Date() },
                 },
-                data: { status: 'waiting_confirmation' },
+                data: {
+                    status: 'waiting_confirmation',
+                    payment_proof_path: imageUrl,
+                    payment_uploaded_at: new Date(),
+                },
             });
-            if (!updated.count)
+            if (!updated.count) {
                 throw new app_error_1.AppError(410, 'Payment time has expired, please book again');
+            }
             yield prisma_client_config_1.prisma.payment_proofs.create({
                 data: { appointment_id: appointment.id, image_url: imageUrl },
             });
@@ -244,22 +276,25 @@ class AppointmentService {
     static cancel(userId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (userId, { params }) {
             const appointment = yield this.findOwnOrFail(userId, params.id);
-            if (!(0, appointment_helpers_1.describe)(appointment).can_cancel)
+            if (!(0, appointment_helpers_1.describe)(appointment).can_cancel) {
                 throw new app_error_1.AppError(409, 'Appointment can no longer be canceled');
+            }
             yield prisma_client_config_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
                 yield (0, appointment_helpers_1.lockSession)(tx, appointment.session_id);
                 // Baca ulang di dalam lock: status bisa berubah (approve admin) sejak dibaca
                 const current = yield tx.appointments.findUniqueOrThrow({
                     where: { id: appointment.id },
                 });
-                if (!CANCELABLE.includes(current.status))
+                if (!CANCELABLE.includes(current.status)) {
                     throw new app_error_1.AppError(409, 'Appointment can no longer be canceled');
+                }
                 yield tx.appointments.update({
                     where: { id: current.id },
                     data: { status: 'canceled', queue_number: null, qr_token: null },
                 });
-                if (current.queue_number !== null)
+                if (current.queue_number !== null) {
                     yield (0, appointment_helpers_1.shiftQueueUp)(tx, current.session_id, current.queue_number);
+                }
             }));
             return this.getOwnById(userId, { params });
         });
@@ -271,8 +306,9 @@ class AppointmentService {
             const appointment = yield this.findOwnOrFail(userId, params.id);
             if (appointment.ratings)
                 throw new app_error_1.AppError(409, 'Appointment has already been rated');
-            if (!(0, appointment_helpers_1.describe)(appointment).can_rate)
+            if (!(0, appointment_helpers_1.describe)(appointment).can_rate) {
                 throw new app_error_1.AppError(422, 'Appointment can be rated after the session is completed');
+            }
             try {
                 yield prisma_client_config_1.prisma.ratings.create({
                     data: {
@@ -286,8 +322,9 @@ class AppointmentService {
             }
             catch (error) {
                 // Dua request bersamaan: unique appointment_id
-                if (error.code === 'P2002')
+                if (error.code === 'P2002') {
                     throw new app_error_1.AppError(409, 'Appointment has already been rated');
+                }
                 throw error;
             }
             return this.getOwnById(userId, { params });

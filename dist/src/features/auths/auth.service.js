@@ -42,8 +42,9 @@ class AuthsService {
                     phone_number: body === null || body === void 0 ? void 0 : body.phone_number,
                 },
             });
-            if (findUserByPhone)
+            if (findUserByPhone) {
                 throw new app_error_1.AppError(409, 'phone number already registered');
+            }
             const hashedPassword = yield bcrypt_lib_1.Bcrypt.hashPassword(body.password);
             // role tidak pernah diambil dari request body
             const _b = yield prisma_client_config_1.prisma.user.create({
@@ -59,11 +60,13 @@ class AuthsService {
                     email: body === null || body === void 0 ? void 0 : body.email,
                 },
             });
-            if (!findUserByEmail)
+            if (!findUserByEmail) {
                 throw new app_error_1.AppError(401, 'Email or password is incorrect');
+            }
             const isPasswordValid = yield bcrypt_lib_1.Bcrypt.comparePassword(body.password, findUserByEmail.password);
-            if (!isPasswordValid)
+            if (!isPasswordValid) {
                 throw new app_error_1.AppError(401, 'Email or password is incorrect');
+            }
             const token = yield jwt_lib_1.Jwt.generate({
                 id: findUserByEmail === null || findUserByEmail === void 0 ? void 0 : findUserByEmail.id,
                 role: findUserByEmail === null || findUserByEmail === void 0 ? void 0 : findUserByEmail.role,
@@ -82,8 +85,9 @@ class AuthsService {
                     id,
                 },
             });
-            if (!findUserById || !findUserById.is_active)
+            if (!findUserById || !findUserById.is_active) {
                 throw new app_error_1.AppError(401, 'Unauthorized');
+            }
             const { password } = findUserById, user = __rest(findUserById, ["password"]);
             return user;
         });

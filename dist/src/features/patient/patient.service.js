@@ -48,8 +48,9 @@ class PatientService {
             });
             if (!user || !user.is_active)
                 throw new app_error_1.AppError(401, 'Unauthorized');
-            if (user.role !== 'PATIENT')
+            if (user.role !== 'PATIENT') {
                 throw new app_error_1.AppError(403, 'only patient can access this resource');
+            }
             const { is_active } = user, patient = __rest(user, ["is_active"]);
             return patient;
         });
@@ -73,21 +74,34 @@ class PatientService {
                 if (taken)
                     throw new app_error_1.AppError(409, 'phone number already registered');
             }
-            const profileData = Object.assign(Object.assign(Object.assign({}, (profile.date_of_birth !== undefined && {
-                date_of_birth: profile.date_of_birth
-                    ? new Date(profile.date_of_birth)
-                    : null,
-            })), (profile.gender !== undefined && { gender: profile.gender })), (profile.address !== undefined && { address: profile.address }));
+            // Hanya kolom profil yang dikirim (bukan undefined) yang ikut diubah
+            const profileData = {};
+            if (profile.date_of_birth !== undefined) {
+                // null = kosongkan tanggal lahir
+                if (profile.date_of_birth) {
+                    profileData.date_of_birth = new Date(profile.date_of_birth);
+                }
+                else {
+                    profileData.date_of_birth = null;
+                }
+            }
+            if (profile.gender !== undefined) {
+                profileData.gender = profile.gender;
+            }
+            if (profile.address !== undefined) {
+                profileData.address = profile.address;
+            }
+            const data = { full_name, email, phone_number };
             // patient_profiles dibuat otomatis bila belum ada
+            const hasProfileChanges = Object.keys(profileData).length > 0;
+            if (hasProfileChanges) {
+                data.patient_profiles = {
+                    upsert: { create: profileData, update: profileData },
+                };
+            }
             return yield prisma_client_config_1.prisma.user.update({
                 where: { id: userId },
-                data: Object.assign({ full_name,
-                    email,
-                    phone_number }, (Object.keys(profileData).length > 0 && {
-                    patient_profiles: {
-                        upsert: { create: profileData, update: profileData },
-                    },
-                })),
+                data,
                 select: userSelect,
             });
         });

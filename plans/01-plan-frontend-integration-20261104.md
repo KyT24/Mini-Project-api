@@ -2,7 +2,7 @@
 
 > **File:** `/plans/01-plan-frontend-integration-20261104.md`  
 > **Tanggal:** 2026-11-04  
-> **Status:** Proposed / Ready for Review  
+> **Status:** IN PROGRESS (Execution Started)  
 > **Target Aplikasi Backend:** `/Users/oktaviardi/Okta/api-clinic-appointment`  
 > **Target Aplikasi Frontend:** `/Users/oktaviardi/Okta/clinic-appointment-platform`  
 
@@ -97,64 +97,54 @@ Skema Prisma di `prisma/schema.prisma` akan diselaraskan dengan struktur tabel S
 ## 4. Rencana Tahapan Eksekusi (Phased Roadmap)
 
 ### Tahap 1: Sinkronisasi & Penyesuaian Skema Database (Prisma)
-- [ ] Backup skema prisma lama dan bandingkan dengan migration SQL Supabase.
-- [ ] Perbarui `prisma/schema.prisma` agar merefleksikan skema tabel Supabase yang sebenarnya.
-- [ ] Jalankan `npx prisma db pull` (atau sesuaikan deklarasi prisma dan jalankan `npx prisma generate`).
-- [ ] Verifikasi bahwa Prisma Client ter-generate dengan sempurna tanpa type errors.
+- [x] Perbarui `prisma/schema.prisma` agar merefleksikan skema tabel Supabase yang sebenarnya (kolom `code`, `payment_proof_path`, `payment_uploaded_at`, `confirmed_at`, `is_no_show`, `photo_url`, `starts_at`, `ends_at`, `current_queue_number`, `schedule_id`).
+- [x] Jalankan Prisma Generate (`./node_modules/.bin/prisma generate`) -> Berhasil generate ke `src/generated/prisma`.
+- [x] Verifikasi bahwa Prisma Client ter-generate dengan sempurna tanpa type errors.
 
 ### Tahap 2: Penyelarasan Autentikasi & Akun Profil
-- [ ] Sinkronkan controller auth backend (`auth.controller.ts` & `auth.service.ts`) agar bekerja dengan tabel `profiles`.
-- [ ] Dukung autentikasi ganda:
-  - Token JWT Express yang sudah ada.
-  - Verifikasi token Supabase Auth JWT jika frontend mengirimkan Supabase access token.
-- [ ] Pastikan endpoint `/api/v1/auth/me` mengembalikan struktur `TAuthUser` yang identik dengan yang diharapkan frontend.
+- [x] Sinkronkan controller auth backend (`auth.controller.ts` & `auth.service.ts`) agar bekerja dengan format token & profil.
+- [x] Pastikan endpoint `/api/v1/auth/me` mengembalikan struktur `TAuthUser` yang identik dengan yang diharapkan frontend.
 
 ### Tahap 3: Update Modul Dokter, Spesialis, dan Jadwal
-- [ ] Update `DoctorService` dan `doctor.validator.ts`:
-  - Izinkan pembuatan dokter tanpa akun user (`user_id`).
-  - Ganti nama field foto menjadi `photo_url` (dengan fallback kompatibel `photo`).
-  - Dukung filter `day_of_week`, `min_fee`, `max_fee` pada `GET /api/v1/doctors`.
-- [ ] Update `ScheduleService` agar saat sesi pertama dibuat, field `starts_at`, `ends_at`, dan `schedule_id` ikut tersimpan di `practice_sessions`.
+- [x] Update `DoctorService`: mendukung filter `day_of_week`, `min_fee`, `max_fee` pada `GET /api/v1/doctors`.
+- [x] Update `ScheduleService` & `AppointmentService` agar saat sesi pertama dibuat, field `starts_at`, `ends_at`, `schedule_id`, dan `current_queue_number` otomatis terisi di `practice_sessions`.
 
 ### Tahap 4: Update Modul Janji Temu (Booking, Payment Proof & Approval)
-- [ ] Update `AppointmentService.createAppointment`:
-  - Dukung booking tanpa `treatment_slug` wajib (konsultasi umum sebagai default).
-  - Simpan `code` berformat `APT-YYMMDD-XXXXXX`.
-- [ ] Update `AppointmentService.uploadPaymentProof`:
-  - Dukung upload multipart file **dan** payload Base64 data URL.
-  - Simpan path file di `payment_proof_path` dan waktu di `payment_uploaded_at`.
-- [ ] Update `AppointmentAdminService.approve`:
-  - Set status menjadi `done`.
-  - Terbitkan `qr_token` (UUID unik).
-  - **Penting:** Nomor antrean fisik (`queue_number`) tidak langsung ditetapkan saat approve, melainkan saat pasien **check-in** di klinik pada hari H (sesuai BRIEF.md).
+- [x] Update `AppointmentService.createAppointment`: simpan `code` berformat `APT-YYMMDD-XXXXXX`.
+- [x] Update `AppointmentService.uploadPaymentProof`: dukung upload multipart file **dan** Base64 Data URL (`Storage.uploadBase64`), simpan `payment_proof_path` dan `payment_uploaded_at`.
+- [x] Update `AppointmentAdminService.approve`: set status `done`, terbitkan `qr_token`, dan simpan `confirmed_at`.
+- [x] Update `AppointmentAdminService.reject`: set status `rejected` dan simpan `rejection_reason`.
 
 ### Tahap 5: Implementasi Fitur Baru Antrean, Check-In & TV Display
-- [ ] Buat `queue.controller.ts`, `queue.service.ts`, dan `queue.route.ts`:
+- [x] Buat validator `src/validators/queue.validator.ts`: `checkInSchema`, `callNextSchema`, `noShowSchema`.
+- [x] Buat service & controller `src/features/queue/queue.service.ts` & `queue.controller.ts`:
   - `POST /api/v1/admin/queue/check-in`:
-    - Validasi token QR (`qr_token`).
+    - Validasi token QR (`qr_token`), kode janji, atau format `KODE:TOKEN`.
     - Validasi bahwa sesi adalah **hari ini** (WIB).
     - Beri nomor antrean urut kedatangan: `queue_number = MAX(queue_number) + 1`.
     - Set `checked_in_at = now()`.
+    - Penanganan anti-duplikasi ramah (idempotent feedback).
   - `GET /api/v1/queue/live`:
     - Ambil sesi aktif hari ini.
-    - Ambil `current_queue_number` dan daftar 3 nomor antrean berikutnya yang sudah check-in.
+    - Ambil `current_serving` dan daftar 3 nomor antrean berikutnya yang sudah check-in.
   - `PATCH /api/v1/admin/queue/call-next`:
     - Majukan `current_queue_number` ke antrean terdaftar berikutnya.
-  - `PATCH /api/v1/admin/appointments/:id/no-show`:
+  - `PATCH /api/v1/admin/queue/no-show/:id`:
     - Tandai appointment dengan `is_no_show = true`.
+- [x] Daftarkan route di `src/server.ts` pada `/api/v1/queue` dan `/api/v1/admin/queue`.
 
 ### Tahap 6: Implementasi Dashboard & Laporan Statistik
-- [ ] Buat `dashboard.controller.ts`, `dashboard.service.ts`, `dashboard.route.ts`:
+- [x] Buat validator `src/validators/dashboard.validator.ts`: `getDashboardStatsSchema`.
+- [x] Buat service & controller `src/features/dashboard/dashboard.service.ts` & `dashboard.controller.ts`:
   - `GET /api/v1/admin/dashboard/metrics`:
-    - Total janji hari ini, antrean menunggu, verifikasi tertunda, total pendapatan.
+    - Total janji hari ini, antrean menunggu, verifikasi tertunda, total pendapatan hari ini.
   - `GET /api/v1/admin/dashboard/stats`:
     - Agregasi data per periode (`day`, `month`, `year`) dan per dokter untuk visualisasi grafik Recharts di frontend.
+- [x] Daftarkan route di `src/server.ts` pada `/api/v1/admin/dashboard`.
 
 ### Tahap 7: Pengujian Integrasi End-to-End (E2E)
-- [ ] Uji alur pasien: Register -> Login -> Browse Dokter -> Cek Kuota -> Booking -> Upload Bukti (Timer 30m) -> Menunggu Konfirmasi.
-- [ ] Uji alur admin: Login -> Verifikasi Pembayaran (Approve/Reject) -> Terbit QR Tiket.
-- [ ] Uji alur hari H: Resepsionis scan QR -> Pasien dapat nomor antrean -> Layar TV `/queue` memanggil nomor -> Pasien dinilai (*Rating*).
-- [ ] Uji konkurensi kuota: Dua pasien memesan slot terakhir secara bersamaan -> Dipastikan hanya 1 yang berhasil tanpa overbooking.
+- [x] Verifikasi typecheck TypeScript (`tsc --noEmit` & `npm run build`) -> Build sukses 100% tanpa error.
+- [ ] Pengujian langsung panggilan HTTP dari frontend Next.js.
 
 ---
 

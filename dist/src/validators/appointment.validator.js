@@ -94,7 +94,11 @@ exports.rejectAppointmentSchema = z.object({
 });
 // "" dari form dianggap null supaya review bisa dikosongkan
 const review = z
-    .preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), z.string().trim().max(500, 'Review have maximum 500 characters').nullable())
+    .preprocess((value) => {
+    if (typeof value === 'string' && value.trim() === '')
+        return null;
+    return value;
+}, z.string().trim().max(500, 'Review have maximum 500 characters').nullable())
     .optional();
 exports.rateAppointmentSchema = z.object({
     params: z.object({ id }),

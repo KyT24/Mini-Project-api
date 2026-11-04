@@ -11,6 +11,8 @@ import { appointmentRouter } from './features/appointment/appointment.route';
 import { adminAppointmentRouter } from './features/appointment/appointment-admin.route';
 import { patientRouter } from './features/patient/patient.route';
 import { scheduleRouter } from './features/schedule/schedule.route';
+import { queueRouter, adminQueueRouter } from './features/queue/queue.route';
+import { adminDashboardRouter } from './features/dashboard/dashboard.route';
 import { AppError } from './errors/app.error';
 
 const PORT: number = parseInt(process.env.PORT!);
@@ -18,7 +20,8 @@ const API_PREFIX: string = process.env.API_PREFIX!;
 const app = express();
 
 app.use(cors(corsOptions));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 app.use(errorMiddleware);
 app.use(`${API_PREFIX}/auth`, AuthRouter);
@@ -28,6 +31,9 @@ app.use(`${API_PREFIX}/appointments`, appointmentRouter);
 app.use(`${API_PREFIX}/admin/appointments`, adminAppointmentRouter);
 app.use(`${API_PREFIX}/patients`, patientRouter);
 app.use(`${API_PREFIX}/schedules`, scheduleRouter);
+app.use(`${API_PREFIX}/queue`, queueRouter);
+app.use(`${API_PREFIX}/admin/queue`, adminQueueRouter);
+app.use(`${API_PREFIX}/admin/dashboard`, adminDashboardRouter);
 app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
   if (error instanceof AppError) {
     return res.status(error.status).json({

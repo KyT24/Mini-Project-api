@@ -109,6 +109,7 @@ export class AppointmentAdminService {
         where: { id: appointment.id },
         data: {
           status: 'done',
+          confirmed_at: new Date(),
           queue_number: nextQueueNumber,
           qr_token: randomBytes(32).toString('hex'),
         },
@@ -125,7 +126,10 @@ export class AppointmentAdminService {
     return await prisma.$transaction(async (tx) => {
       const updated = await tx.appointments.updateMany({
         where: { id: params.id, status: 'waiting_confirmation' },
-        data: { status: 'rejected' },
+        data: {
+          status: 'rejected',
+          rejection_reason: body.reason,
+        },
       });
       if (!updated.count) {
         const appointment = await this.findOrFail(params.id, tx);

@@ -150,10 +150,13 @@ export class AppointmentService {
         },
         create: {
           doctor_id,
+          schedule_id: schedule.id,
           session_date: toDbDate(session_date),
           start_time: toDbTime(start_time),
           end_time: schedule.end_time,
+          starts_at: startsAt,
           patient_quota: schedule.patient_quota,
+          current_queue_number: 0,
         },
         update: {},
       });
@@ -186,6 +189,7 @@ export class AppointmentService {
       // Batas bayar 30 menit, tapi tidak boleh melewati jam mulai sesi
       const holdUntil = now.getTime() + PAYMENT_HOLD_MINUTES * 60 * 1000;
       const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
+      const apptCode = generateCode(session_date);
 
       return await tx.appointments.create({
         data: {
@@ -193,7 +197,8 @@ export class AppointmentService {
           doctor_id,
           session_id: session.id,
           treatment_id: treatment.id,
-          appointment_code: generateCode(session_date),
+          appointment_code: apptCode,
+          code: apptCode,
           consultation_fee: consultationFee,
           treatment_fee: treatmentFee,
           total_amount: consultationFee.add(treatmentFee),
@@ -252,8 +257,9 @@ export class AppointmentService {
     userId: string,
     { params }: appointmentIdRequest,
     file?: Express.Multer.File,
+    imageBase64?: string,
   ) {
-    if (!file) throw new AppError(422, 'Payment proof image is required');
+    if (!file && !imageBase64) throw new AppError(422, 'Payment proof image is required');
 
     const appointment = await this.findOwnOrFail(userId, params.id);
 
@@ -264,11 +270,15 @@ export class AppointmentService {
       throw new AppError(409, 'Payment proof has already been uploaded');
     }
 
-    const extension = file.mimetype.split('/')[1];
-    const imageUrl = await Storage.upload(
-      `${appointment.id}/${Date.now()}.${extension}`,
-      file,
-    );
+    let imageUrl: string;
+    const pathPrefix = `${appointment.id}/${Date.now()}`;
+
+    if (file) {
+      const extension = file.mimetype.split('/')[1] || 'jpg';
+      imageUrl = await Storage.upload(`${pathPrefix}.${extension}`, file);
+    } else {
+      imageUrl = await Storage.uploadBase64(`${pathPrefix}.jpg`, imageBase64!);
+    }
 
     // Pastikan batas waktu belum lewat saat file selesai diunggah
     const updated = await prisma.appointments.updateMany({
@@ -277,7 +287,11 @@ export class AppointmentService {
         status: 'waiting_payment',
         payment_deadline: { gt: new Date() },
       },
-      data: { status: 'waiting_confirmation' },
+      data: {
+        status: 'waiting_confirmation',
+        payment_proof_path: imageUrl,
+        payment_uploaded_at: new Date(),
+      },
     });
     if (!updated.count) {
       throw new AppError(410, 'Payment time has expired, please book again');

@@ -39,7 +39,11 @@ class AppointmentAdminService {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { status, page, limit } = query;
             yield (0, appointment_helpers_1.syncStatuses)();
-            const where = Object.assign({}, (status && { status }));
+            // Filter status hanya dipakai jika dikirim dari query
+            const where = {};
+            if (status) {
+                where.status = status;
+            }
             // Antrean verifikasi: yang paling lama menunggu di atas
             const orderBy = status === 'waiting_confirmation' ? { updated_at: 'asc' } : { created_at: 'desc' };
             const [appointments, total] = yield Promise.all([
@@ -74,10 +78,12 @@ class AppointmentAdminService {
                 var _a;
                 yield (0, appointment_helpers_1.lockSession)(tx, session_id);
                 const appointment = yield this.findOrFail(params.id, tx);
-                if (appointment.status !== 'waiting_confirmation')
+                if (appointment.status !== 'waiting_confirmation') {
                     throw new app_error_1.AppError(409, `Appointment is ${appointment.status}, cannot be approved`);
-                if ((0, appointment_helpers_1.sessionStartsAt)(appointment.practice_sessions) <= new Date())
+                }
+                if ((0, appointment_helpers_1.sessionStartsAt)(appointment.practice_sessions) <= new Date()) {
                     throw new app_error_1.AppError(409, 'Session has already started');
+                }
                 const { _max } = yield tx.appointments.aggregate({
                     where: { session_id, status: 'done' },
                     _max: { queue_number: true },
@@ -86,11 +92,15 @@ class AppointmentAdminService {
                     where: { appointment_id: appointment.id, verification_status: 'pending' },
                     data: { verification_status: 'approved', verified_by: adminId, verified_at: new Date() },
                 });
+                // Nomor antrean = nomor terbesar saat ini + 1 (mulai dari 1 jika belum ada)
+                const lastQueueNumber = (_a = _max.queue_number) !== null && _a !== void 0 ? _a : 0;
+                const nextQueueNumber = lastQueueNumber + 1;
                 yield tx.appointments.update({
                     where: { id: appointment.id },
                     data: {
                         status: 'done',
-                        queue_number: ((_a = _max.queue_number) !== null && _a !== void 0 ? _a : 0) + 1,
+                        confirmed_at: new Date(),
+                        queue_number: nextQueueNumber,
                         qr_token: (0, crypto_1.randomBytes)(32).toString('hex'),
                     },
                 });
@@ -105,7 +115,10 @@ class AppointmentAdminService {
             return yield prisma_client_config_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
                 const updated = yield tx.appointments.updateMany({
                     where: { id: params.id, status: 'waiting_confirmation' },
-                    data: { status: 'rejected' },
+                    data: {
+                        status: 'rejected',
+                        rejection_reason: body.reason,
+                    },
                 });
                 if (!updated.count) {
                     const appointment = yield this.findOrFail(params.id, tx);

@@ -48,18 +48,33 @@ class ScheduleService {
     // agar tidak bentrok saat diaktifkan lagi)
     static assertNoOverlap(doctorId, day, start, end, exceptId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({
-                where: Object.assign({ doctor_id: doctorId, day_of_week: day, start_time: { lt: (0, time_lib_1.toDbTime)(end) }, end_time: { gt: (0, time_lib_1.toDbTime)(start) } }, (exceptId && { NOT: { id: exceptId } })),
-            });
-            if (clash)
+            // Bentrok jika jadwal lain mulai sebelum jadwal ini selesai
+            // dan selesai setelah jadwal ini mulai
+            const where = {
+                doctor_id: doctorId,
+                day_of_week: day,
+                start_time: { lt: (0, time_lib_1.toDbTime)(end) },
+                end_time: { gt: (0, time_lib_1.toDbTime)(start) },
+            };
+            // Saat update, jadwal yang sedang diubah tidak ikut dicek
+            if (exceptId) {
+                where.NOT = { id: exceptId };
+            }
+            const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({ where });
+            if (clash) {
                 throw new app_error_1.AppError(409, `schedule overlaps with ${(0, time_lib_1.fromDbTime)(clash.start_time)}-${(0, time_lib_1.fromDbTime)(clash.end_time)}`);
+            }
         });
     }
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { doctor_id, is_active } = query;
+            const where = { doctor_id };
+            if (is_active !== undefined) {
+                where.is_active = is_active;
+            }
             return yield prisma_client_config_1.prisma.doctor_schedules.findMany({
-                where: Object.assign({ doctor_id }, (is_active !== undefined && { is_active })),
+                where,
                 orderBy: scheduleOrder,
             });
         });
@@ -87,9 +102,17 @@ class ScheduleService {
                 throw new app_error_1.AppError(422, 'End time must be after start time');
             yield this.assertNoOverlap(current.doctor_id, day, start, end, current.id);
             const { start_time, end_time } = body, schedule = __rest(body, ["start_time", "end_time"]);
+            const data = Object.assign({}, schedule);
+            // Jam hanya diubah jika dikirim, lalu dikonversi ke format kolom DB
+            if (start_time) {
+                data.start_time = (0, time_lib_1.toDbTime)(start_time);
+            }
+            if (end_time) {
+                data.end_time = (0, time_lib_1.toDbTime)(end_time);
+            }
             return yield prisma_client_config_1.prisma.doctor_schedules.update({
                 where: { id: params.id },
-                data: Object.assign(Object.assign(Object.assign({}, schedule), (start_time && { start_time: (0, time_lib_1.toDbTime)(start_time) })), (end_time && { end_time: (0, time_lib_1.toDbTime)(end_time) })),
+                data,
             });
         });
     }

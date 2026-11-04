@@ -30,8 +30,9 @@ class SpecialistService {
     static assertNameAvailable(name, exceptId) {
         return __awaiter(this, void 0, void 0, function* () {
             const existing = yield prisma_client_config_1.prisma.specialists.findUnique({ where: { name } });
-            if (existing && existing.id !== exceptId)
+            if (existing && existing.id !== exceptId) {
                 throw new app_error_1.AppError(409, 'specialist name already registered');
+            }
         });
     }
     static create(_a) {
@@ -46,7 +47,14 @@ class SpecialistService {
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { page, limit, search, is_active } = query;
-            const where = Object.assign(Object.assign({}, (is_active !== undefined && { is_active })), (search && { name: { contains: search, mode: 'insensitive' } }));
+            // Filter hanya ditambahkan jika diisi dari query
+            const where = {};
+            if (is_active !== undefined) {
+                where.is_active = is_active;
+            }
+            if (search) {
+                where.name = { contains: search, mode: 'insensitive' };
+            }
             const [specialists, total] = yield Promise.all([
                 prisma_client_config_1.prisma.specialists.findMany({
                     where,
@@ -83,8 +91,9 @@ class SpecialistService {
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
             const specialist = yield this.findOrFail(params.id);
-            if (specialist._count.doctors)
+            if (specialist._count.doctors) {
                 throw new app_error_1.AppError(409, 'specialist is still used by doctors; deactivate instead');
+            }
             return yield prisma_client_config_1.prisma.specialists.delete({ where: { id: params.id } });
         });
     }

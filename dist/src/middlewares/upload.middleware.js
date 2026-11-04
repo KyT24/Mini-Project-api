@@ -12,22 +12,27 @@ const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const upload = (0, multer_1.default)({
     storage: multer_1.default.memoryStorage(),
     limits: { fileSize: MAX_FILE_SIZE, files: 1 },
-    fileFilter: (req, file, cb) => {
+    fileFilter: (req, file, callback) => {
         if (ALLOWED_TYPES.includes(file.mimetype))
-            return cb(null, true);
-        cb(new app_error_1.AppError(422, 'File must be a JPG, PNG, or WEBP image'));
+            return callback(null, true);
+        callback(new app_error_1.AppError(422, 'File must be a JPG, PNG, or WEBP image'));
     },
 });
 // Ubah error multer menjadi AppError agar formatnya sama dengan error lain
-const uploadSingleImage = (field) => (req, res, next) => upload.single(field)(req, res, (error) => {
-    if (!error)
-        return next();
-    if (error instanceof app_error_1.AppError)
-        return next(error);
-    if (error instanceof multer_1.default.MulterError && error.code === 'LIMIT_FILE_SIZE')
-        return next(new app_error_1.AppError(413, 'File size must be at most 2 MB'));
-    if (error instanceof multer_1.default.MulterError)
-        return next(new app_error_1.AppError(422, error.message));
-    next(error);
-});
+// Contoh: uploadSingleImage('photo') → middleware yang membaca 1 file dari field "photo"
+const uploadSingleImage = (field) => {
+    return (req, res, next) => upload.single(field)(req, res, (error) => {
+        if (!error)
+            return next();
+        if (error instanceof app_error_1.AppError)
+            return next(error);
+        if (error instanceof multer_1.default.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+            return next(new app_error_1.AppError(413, 'File size must be at most 2 MB'));
+        }
+        if (error instanceof multer_1.default.MulterError) {
+            return next(new app_error_1.AppError(422, error.message));
+        }
+        next(error);
+    });
+};
 exports.uploadSingleImage = uploadSingleImage;
