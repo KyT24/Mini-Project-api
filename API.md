@@ -159,7 +159,30 @@ Gunakan akun berikut yang sudah disediakan di seed data:
   }
   ```
 
-### 1.5 Logout
+### 1.5 Ubah Password Akun
+Mengganti password akun pengguna (pasien maupun admin) dengan memvalidasi password saat ini.
+- **Method / Endpoint**: `PATCH /auth/password` (alias: `PATCH /patients/me/password`)
+- **Akses**: Terautentikasi (Bearer Token atau Cookie)
+- **Format Header**:
+  - `Authorization: Bearer <TOKEN>`
+  - `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "current_password": "PasswordLama123!",
+    "new_password": "PasswordBaru123!"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "success": true,
+    "message": "Password berhasil diperbarui",
+    "data": {}
+  }
+  ```
+
+### 1.6 Logout
 - **Method / Endpoint**: `POST /auth/logout`
 - **Akses**: Terautentikasi
 - **Keterangan**: Menghapus cookie `token` pada browser/klien.

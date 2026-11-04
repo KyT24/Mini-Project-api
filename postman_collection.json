@@ -206,6 +206,31 @@
           }
         },
         {
+          "name": "Change Password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"Pasien123!\",\n  \"new_password\": \"NewSecret123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/password",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "password"]
+            }
+          }
+        },
+        {
           "name": "Logout",
           "request": {
             "method": "POST",
@@ -266,6 +291,31 @@
               "raw": "{{base_url}}/patients/me",
               "host": ["{{base_url}}"],
               "path": ["patients", "me"]
+            }
+          }
+        },
+        {
+          "name": "Change Password (Patient Alias)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"Pasien123!\",\n  \"new_password\": \"NewSecret123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/patients/me/password",
+              "host": ["{{base_url}}"],
+              "path": ["patients", "me", "password"]
             }
           }
         }
