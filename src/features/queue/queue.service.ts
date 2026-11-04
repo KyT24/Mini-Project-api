@@ -1,6 +1,7 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { toDbDate } from '../../lib/time.lib';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import { clinicNow, lockSession } from '../appointment/appointment.helpers';
 
 export class QueueService {
@@ -10,6 +11,20 @@ export class QueueService {
     if (token.includes(':')) {
       const parts = token.split(':');
       token = (parts[1] || parts[0]).trim();
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('check_in', { p_qr_token: token });
+      if (!error && data) {
+        return data;
+      }
+      if (error && error.message) {
+        throw new AppError(400, error.message);
+      }
+    } catch (rpcErr: any) {
+      if (rpcErr instanceof AppError) throw rpcErr;
+      // Continue to Prisma fallback
     }
 
     const appointment = await prisma.appointments.findFirst({
@@ -112,6 +127,16 @@ export class QueueService {
 
   // Antrean langsung untuk display TV (/queue)
   static async getLiveQueue() {
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('get_live_queue');
+      if (!rpcErr && rpcData && Array.isArray(rpcData)) {
+        return rpcData;
+      }
+    } catch {
+      // Lanjut ke fallback jika RPC belum tersedia
+    }
+
     const todayWib = clinicNow().date;
 
     const sessions = await prisma.practice_sessions.findMany({
@@ -173,6 +198,19 @@ export class QueueService {
 
   // Panggil antrean berikutnya (Call Next)
   static async callNext(sessionId: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('call_next', { p_session_id: sessionId });
+      if (!error && data) {
+        return data;
+      }
+      if (error && error.message) {
+        throw new AppError(400, error.message);
+      }
+    } catch (rpcErr: any) {
+      if (rpcErr instanceof AppError) throw rpcErr;
+    }
+
     const session = await prisma.practice_sessions.findUnique({
       where: { id: sessionId },
     });
@@ -213,6 +251,19 @@ export class QueueService {
 
   // Tandai pasien tidak hadir (No-Show)
   static async markNoShow(appointmentId: string) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.rpc('mark_no_show', { p_appointment_id: appointmentId });
+      if (!error && data) {
+        return data;
+      }
+      if (error && error.message) {
+        throw new AppError(400, error.message);
+      }
+    } catch (rpcErr: any) {
+      if (rpcErr instanceof AppError) throw rpcErr;
+    }
+
     const appointment = await prisma.appointments.findUnique({
       where: { id: appointmentId },
     });

@@ -13,6 +13,7 @@ exports.QueueService = void 0;
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
 const time_lib_1 = require("../../lib/time.lib");
+const supabase_lib_1 = require("../../lib/supabase.lib");
 const appointment_helpers_1 = require("../appointment/appointment.helpers");
 class QueueService {
     // Scan QR / Check-in pasien pada hari H praktik
@@ -23,6 +24,21 @@ class QueueService {
             if (token.includes(':')) {
                 const parts = token.split(':');
                 token = (parts[1] || parts[0]).trim();
+            }
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase.rpc('check_in', { p_qr_token: token });
+                if (!error && data) {
+                    return data;
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(400, error.message);
+                }
+            }
+            catch (rpcErr) {
+                if (rpcErr instanceof app_error_1.AppError)
+                    throw rpcErr;
+                // Continue to Prisma fallback
             }
             const appointment = yield prisma_client_config_1.prisma.appointments.findFirst({
                 where: {
@@ -110,6 +126,16 @@ class QueueService {
     // Antrean langsung untuk display TV (/queue)
     static getLiveQueue() {
         return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: rpcData, error: rpcErr } = yield supabase.rpc('get_live_queue');
+                if (!rpcErr && rpcData && Array.isArray(rpcData)) {
+                    return rpcData;
+                }
+            }
+            catch (_a) {
+                // Lanjut ke fallback jika RPC belum tersedia
+            }
             const todayWib = (0, appointment_helpers_1.clinicNow)().date;
             const sessions = yield prisma_client_config_1.prisma.practice_sessions.findMany({
                 where: {
@@ -171,6 +197,20 @@ class QueueService {
     static callNext(sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase.rpc('call_next', { p_session_id: sessionId });
+                if (!error && data) {
+                    return data;
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(400, error.message);
+                }
+            }
+            catch (rpcErr) {
+                if (rpcErr instanceof app_error_1.AppError)
+                    throw rpcErr;
+            }
             const session = yield prisma_client_config_1.prisma.practice_sessions.findUnique({
                 where: { id: sessionId },
             });
@@ -206,6 +246,20 @@ class QueueService {
     // Tandai pasien tidak hadir (No-Show)
     static markNoShow(appointmentId) {
         return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase.rpc('mark_no_show', { p_appointment_id: appointmentId });
+                if (!error && data) {
+                    return data;
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(400, error.message);
+                }
+            }
+            catch (rpcErr) {
+                if (rpcErr instanceof app_error_1.AppError)
+                    throw rpcErr;
+            }
             const appointment = yield prisma_client_config_1.prisma.appointments.findUnique({
                 where: { id: appointmentId },
             });
