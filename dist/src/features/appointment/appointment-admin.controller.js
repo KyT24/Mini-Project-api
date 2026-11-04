@@ -64,5 +64,19 @@ class AppointmentAdminController {
             });
         });
     }
+    static updateAppointment(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { params, body } = (0, validate_1.validate)(appointment_validator_1.updateAdminAppointmentSchema, {
+                params: req.params,
+                body: req.body,
+            });
+            const appointment = yield appointment_admin_service_1.AppointmentAdminService.update({ params, body });
+            res.status(200).json({
+                success: true,
+                message: 'appointment updated successfully',
+                data: appointment,
+            });
+        });
+    }
 }
 exports.AppointmentAdminController = AppointmentAdminController;

@@ -19,3 +19,8 @@ adminAppointmentRouter.patch(
   ...adminOnly,
   AppointmentAdminController.rejectAppointment,
 );
+adminAppointmentRouter.patch(
+  '/:id',
+  ...adminOnly,
+  AppointmentAdminController.updateAppointment,
+);

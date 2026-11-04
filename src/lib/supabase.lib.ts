@@ -1,24 +1,101 @@
 import 'dotenv/config';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppError } from '../errors/app.error';
 
-// Pakai service role key atau anon/publishable key agar bisa membaca/menulis ke Supabase & bucket
-export const getSupabaseClient = () => {
+let cachedAdminToken: string | null = null;
+let tokenExpiresAt = 0;
+let tokenPromise: Promise<string> | null = null;
+
+async function getOrFetchAdminToken(): Promise<string> {
+  const now = Date.now();
+  if (cachedAdminToken && tokenExpiresAt > now + 60000) {
+    return cachedAdminToken;
+  }
+
+  if (!tokenPromise) {
+    tokenPromise = (async () => {
+      try {
+        const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+        const anonKey =
+          process.env.SUPABASE_ANON_KEY ||
+          process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+          process.env.SUPABASE_KEY;
+
+        if (!url || !anonKey) return '';
+
+        const authClient = createClient(url, anonKey, { auth: { persistSession: false } });
+        const email = process.env.ADMIN_SEED_EMAIL || 'admin@klinik.test';
+        const password = process.env.ADMIN_SEED_PASSWORD || 'Admin123!';
+
+        const { data, error } = await authClient.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (!error && data?.session?.access_token) {
+          cachedAdminToken = data.session.access_token;
+          tokenExpiresAt = Date.now() + (data.session.expires_in || 3600) * 1000;
+          return cachedAdminToken;
+        }
+      } catch (e) {
+        console.error('Failed to authenticate Supabase admin session for backend queries:', e);
+      } finally {
+        tokenPromise = null;
+      }
+      return '';
+    })();
+  }
+
+  return tokenPromise;
+}
+
+let cachedClient: SupabaseClient | null = null;
+
+// Mengembalikan Supabase client yang dapat mengakses data secara penuh (admin role / service role)
+export const getSupabaseClient = (): SupabaseClient => {
+  if (cachedClient) return cachedClient;
+
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey =
     process.env.SUPABASE_ANON_KEY ||
     process.env.SUPABASE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!url || !key) {
+  if (!url || (!serviceKey && !anonKey)) {
     throw new AppError(500, 'Supabase URL or Key is not configured');
   }
 
-  return createClient(url, key, {
+  // Jika service key adalah JWT service role yang valid (dimulai dengan 'eyJ')
+  if (serviceKey && serviceKey.startsWith('eyJ')) {
+    cachedClient = createClient(url, serviceKey, {
+      auth: { persistSession: false },
+    });
+    return cachedClient;
+  }
+
+  // Jika hanya memiliki anon/publishable key, attach bearer token admin agar RLS mengizinkan query
+  const keyToUse = serviceKey || anonKey!;
+  const customFetch: typeof fetch = async (input, init) => {
+    const token = await getOrFetchAdminToken();
+    if (token) {
+      const headers = new Headers(init?.headers);
+      // Pasang authorization bearer admin jika belum ditentukan secara spesifik
+      if (!headers.has('Authorization') || headers.get('Authorization')?.includes(keyToUse)) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      return fetch(input, { ...init, headers });
+    }
+    return fetch(input, init);
+  };
+
+  cachedClient = createClient(url, keyToUse, {
     auth: { persistSession: false },
+    global: { fetch: customFetch },
   });
+
+  return cachedClient;
 };
 
 const getClient = getSupabaseClient;

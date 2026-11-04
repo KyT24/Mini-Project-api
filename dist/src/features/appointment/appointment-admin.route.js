@@ -11,3 +11,4 @@ exports.adminAppointmentRouter.get('/', ...adminOnly, appointment_admin_controll
 exports.adminAppointmentRouter.get('/:id', ...adminOnly, appointment_admin_controller_1.AppointmentAdminController.getAppointmentById);
 exports.adminAppointmentRouter.patch('/:id/approve', ...adminOnly, appointment_admin_controller_1.AppointmentAdminController.approveAppointment);
 exports.adminAppointmentRouter.patch('/:id/reject', ...adminOnly, appointment_admin_controller_1.AppointmentAdminController.rejectAppointment);
+exports.adminAppointmentRouter.patch('/:id', ...adminOnly, appointment_admin_controller_1.AppointmentAdminController.updateAppointment);

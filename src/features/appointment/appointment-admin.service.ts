@@ -3,10 +3,12 @@ import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
 import { getSupabaseClient } from '../../lib/supabase.lib';
+import { toDbDate } from '../../lib/time.lib';
 import {
   appointmentIdRequest,
   getAdminAppointmentsRequest,
   rejectAppointmentRequest,
+  updateAdminAppointmentRequest,
 } from '../../validators/appointment.validator';
 import {
   appointmentInclude,
@@ -45,7 +47,7 @@ export class AppointmentAdminService {
   }
 
   static async getAll({ query }: getAdminAppointmentsRequest) {
-    const { status, page, limit } = query;
+    const { status, session_id, doctor_id, date, page, limit } = query;
     await syncStatuses();
 
     try {
@@ -66,6 +68,17 @@ export class AppointmentAdminService {
       if (status) {
         q = q.eq('status', status);
       }
+      if (session_id) {
+        q = q.eq('session_id', session_id);
+      }
+      if (doctor_id) {
+        q = q.eq('doctor_id', doctor_id);
+      }
+      if (date) {
+        // filter session date
+        q = q.eq('practice_sessions.session_date', date);
+      }
+
       if (status === 'waiting_confirmation') {
         q = q.order('updated_at', { ascending: true });
       } else {
@@ -104,6 +117,16 @@ export class AppointmentAdminService {
     if (status) {
       where.status = status;
     }
+    if (session_id) {
+      where.session_id = session_id;
+    }
+    if (doctor_id) {
+      where.doctor_id = doctor_id;
+    }
+    if (date) {
+      where.practice_sessions = { session_date: toDbDate(date) };
+    }
+
     // Antrean verifikasi: yang paling lama menunggu di atas
     const orderBy: Prisma.appointmentsOrderByWithRelationInput =
       status === 'waiting_confirmation' ? { updated_at: 'asc' } : { created_at: 'desc' };
@@ -135,6 +158,81 @@ export class AppointmentAdminService {
     return {
       appointments: mapped,
       meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+    };
+  }
+
+  static async update({ params, body }: updateAdminAppointmentRequest) {
+    await syncStatuses();
+
+    try {
+      const supabase = getSupabaseClient();
+      const updateData: any = { updated_at: new Date().toISOString() };
+      if (body.status) updateData.status = body.status;
+      if (body.rejection_reason || body.notes) {
+        updateData.rejection_reason = body.rejection_reason || body.notes;
+      }
+      if (body.doctor_id) updateData.doctor_id = body.doctor_id;
+      if (body.session_id) updateData.session_id = body.session_id;
+      if (body.is_no_show !== undefined) updateData.is_no_show = body.is_no_show;
+
+      const { data: updated, error } = await supabase
+        .from('appointments')
+        .update(updateData)
+        .eq('id', params.id)
+        .select(
+          `
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `,
+        )
+        .single();
+
+      if (!error && updated) {
+        return {
+          ...updated,
+          patient_profiles: {
+            id: updated.patient_id,
+            users: {
+              full_name: updated.profiles?.full_name || 'Pasien',
+              email: '',
+              phone_number: updated.profiles?.phone_number || null,
+            },
+          },
+        };
+      }
+    } catch (e: any) {
+      if (e instanceof AppError) throw e;
+    }
+
+    const updateData: any = {};
+    if (body.status) updateData.status = body.status;
+    if (body.rejection_reason || body.notes) {
+      updateData.rejection_reason = body.rejection_reason || body.notes;
+    }
+    if (body.doctor_id) updateData.doctor_id = body.doctor_id;
+    if (body.session_id) updateData.session_id = body.session_id;
+    if (body.is_no_show !== undefined) updateData.is_no_show = body.is_no_show;
+
+    const updated: any = await prisma.appointments.update({
+      where: { id: params.id },
+      data: updateData,
+      include: adminInclude,
+      omit: omitQr,
+    });
+
+    return {
+      ...updated,
+      patient_profiles: {
+        id: updated.patient_id,
+        users: {
+          full_name: updated.profiles?.full_name || 'Pasien',
+          email: '',
+          phone_number: updated.profiles?.phone_number || null,
+        },
+      },
     };
   }
 

@@ -63,12 +63,31 @@ export const TRANSACTION_STATUSES = [
 export const getAdminAppointmentsSchema = z.object({
   query: z.object({
     status: z.enum(TRANSACTION_STATUSES, 'Status is not valid').optional(),
+    session_id: z.string().uuid().optional(),
+    doctor_id: z.string().uuid().optional(),
+    date: z.string().optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(50).default(10),
   }),
 });
 
 export type getAdminAppointmentsRequest = z.infer<typeof getAdminAppointmentsSchema>;
+
+export const updateAdminAppointmentSchema = z.object({
+  params: z.object({ id }),
+  body: z.object({
+    doctor_id: z.string().uuid().optional(),
+    session_id: z.string().uuid().optional(),
+    session_date: z.string().optional(),
+    start_time: z.string().optional(),
+    status: z.enum(TRANSACTION_STATUSES).optional(),
+    notes: z.string().optional(),
+    rejection_reason: z.string().optional(),
+    is_no_show: z.boolean().optional(),
+  }),
+});
+
+export type updateAdminAppointmentRequest = z.infer<typeof updateAdminAppointmentSchema>;
 
 export const rejectAppointmentSchema = z.object({
   params: z.object({ id }),

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rateAppointmentSchema = exports.rejectAppointmentSchema = exports.getAdminAppointmentsSchema = exports.TRANSACTION_STATUSES = exports.appointmentIdSchema = exports.getMyAppointmentsSchema = exports.createAppointmentSchema = exports.getAvailabilitySchema = void 0;
+exports.rateAppointmentSchema = exports.rejectAppointmentSchema = exports.updateAdminAppointmentSchema = exports.getAdminAppointmentsSchema = exports.TRANSACTION_STATUSES = exports.appointmentIdSchema = exports.getMyAppointmentsSchema = exports.createAppointmentSchema = exports.getAvailabilitySchema = void 0;
 const z = __importStar(require("zod"));
 const validators_config_1 = require("./validators.config");
 const doctor_id = (0, validators_config_1.uuidValidator)('Doctor id must be a valid uuid');
@@ -81,8 +81,24 @@ exports.TRANSACTION_STATUSES = [
 exports.getAdminAppointmentsSchema = z.object({
     query: z.object({
         status: z.enum(exports.TRANSACTION_STATUSES, 'Status is not valid').optional(),
+        session_id: z.string().uuid().optional(),
+        doctor_id: z.string().uuid().optional(),
+        date: z.string().optional(),
         page: z.coerce.number().int().min(1).default(1),
         limit: z.coerce.number().int().min(1).max(50).default(10),
+    }),
+});
+exports.updateAdminAppointmentSchema = z.object({
+    params: z.object({ id }),
+    body: z.object({
+        doctor_id: z.string().uuid().optional(),
+        session_id: z.string().uuid().optional(),
+        session_date: z.string().optional(),
+        start_time: z.string().optional(),
+        status: z.enum(exports.TRANSACTION_STATUSES).optional(),
+        notes: z.string().optional(),
+        rejection_reason: z.string().optional(),
+        is_no_show: z.boolean().optional(),
     }),
 });
 exports.rejectAppointmentSchema = z.object({

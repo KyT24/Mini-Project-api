@@ -252,6 +252,7 @@ class AppointmentService {
                         start_time: (0, time_lib_1.toDbTime)(start_time),
                         end_time: schedule.end_time,
                         starts_at: startsAt,
+                        ends_at: (0, appointment_helpers_1.slotStartsAt)(session_date, (0, time_lib_1.fromDbTime)(schedule.end_time)),
                         patient_quota: schedule.patient_quota,
                         current_queue_number: 0,
                     },

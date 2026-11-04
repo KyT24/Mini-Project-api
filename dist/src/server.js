@@ -45,6 +45,7 @@ app.use(`${API_PREFIX}/specialists`, specialist_route_1.specialistRouter);
 app.use(`${API_PREFIX}/appointments`, appointment_route_1.appointmentRouter);
 app.use(`${API_PREFIX}/admin/appointments`, appointment_admin_route_1.adminAppointmentRouter);
 app.use(`${API_PREFIX}/patients`, patient_route_1.patientRouter);
+app.use(`${API_PREFIX}/patient`, patient_route_1.patientRouter);
 app.use(`${API_PREFIX}/schedules`, schedule_route_1.scheduleRouter);
 app.use(`${API_PREFIX}/queue`, queue_route_1.queueRouter);
 app.use(`${API_PREFIX}/admin/queue`, queue_route_1.adminQueueRouter);

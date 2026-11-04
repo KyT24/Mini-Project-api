@@ -288,6 +288,7 @@ export class AppointmentService {
           start_time: toDbTime(start_time),
           end_time: schedule.end_time,
           starts_at: startsAt,
+          ends_at: slotStartsAt(session_date, fromDbTime(schedule.end_time)),
           patient_quota: schedule.patient_quota,
           current_queue_number: 0,
         },
