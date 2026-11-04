@@ -12,10 +12,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyRole = exports.verifyToken = void 0;
 const app_error_1 = require("../errors/app.error");
 const jwt_lib_1 = require("../lib/jwt.lib");
-// Baca token dari cookie httpOnly, simpan payload di res.locals.auth
+// Baca token dari cookie httpOnly atau Authorization header (Bearer token)
 const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const token = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7).trim()
+        : null;
+    const token = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token) || bearerToken;
     if (!token)
         throw new app_error_1.AppError(401, 'Unauthorized');
     try {

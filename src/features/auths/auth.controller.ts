@@ -56,7 +56,7 @@ export class AuthsController {
   }
 
   static async me(req: Request, res: Response) {
-    const user = await AuthsService.me(res.locals.auth.id);
+    const user = await AuthsService.me(res.locals.auth?.id, res.locals.auth);
 
     res.status(200).json({
       success: true,
