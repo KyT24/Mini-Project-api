@@ -37,22 +37,63 @@ const orderBy = {
 
 export class DoctorService {
   private static async findOrFail(id: string) {
-    const doctor = await prisma.doctors.findUnique({
-      where: { id },
-      include: doctorInclude,
-    });
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('doctors')
+        .select(`
+          *,
+          specialists:specialist_id(id, name, description),
+          doctor_schedules(*)
+        `)
+        .eq('id', id)
+        .maybeSingle();
 
-    if (!doctor) throw new AppError(404, 'doctor not found');
+      if (!error && data) return data;
+    } catch {
+      // Prisma fallback
+    }
 
-    return doctor;
+    try {
+      const doctor = await prisma.doctors.findUnique({
+        where: { id },
+        include: doctorInclude,
+      });
+
+      if (doctor) return doctor;
+    } catch {
+      // Ignore Prisma connection error
+    }
+
+    throw new AppError(404, 'doctor not found');
   }
 
   private static async assertSpecialistExists(specialistId?: string | null) {
     if (!specialistId) return;
-    const specialist = await prisma.specialists.findUnique({
-      where: { id: specialistId },
-    });
-    if (!specialist) throw new AppError(404, 'specialist not found');
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .select('id')
+        .eq('id', specialistId)
+        .maybeSingle();
+
+      if (!error && data) return;
+    } catch {
+      // Prisma fallback
+    }
+
+    try {
+      const specialist = await prisma.specialists.findUnique({
+        where: { id: specialistId },
+      });
+      if (specialist) return;
+    } catch {
+      // Ignore Prisma error
+    }
+
+    throw new AppError(404, 'specialist not found');
   }
 
   static async create({ body }: createDoctorRequest) {

@@ -212,42 +212,90 @@ export class QueueService {
       if (rpcErr instanceof AppError) throw rpcErr;
     }
 
-    const session = await prisma.practice_sessions.findUnique({
-      where: { id: sessionId },
-    });
+    try {
+      const supabase = getSupabaseClient();
+      const { data: session } = await supabase
+        .from('practice_sessions')
+        .select('*')
+        .eq('id', sessionId)
+        .maybeSingle();
 
-    if (!session) {
-      throw new AppError(404, 'Sesi praktik tidak ditemukan');
+      if (session) {
+        const currentQueue = session.current_queue_number ?? 0;
+        const { data: nextPatient } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('session_id', sessionId)
+          .eq('status', 'done')
+          .not('checked_in_at', 'is', null)
+          .eq('is_no_show', false)
+          .gt('queue_number', currentQueue)
+          .order('queue_number', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+
+        if (!nextPatient || !nextPatient.queue_number) {
+          throw new AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+        }
+
+        const { data: updatedSession } = await supabase
+          .from('practice_sessions')
+          .update({ current_queue_number: nextPatient.queue_number })
+          .eq('id', sessionId)
+          .select()
+          .single();
+
+        return {
+          session_id: sessionId,
+          called_number: nextPatient.queue_number,
+          current_queue_number: updatedSession?.current_queue_number ?? nextPatient.queue_number,
+        };
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
     }
 
-    const currentQueue = session.current_queue_number ?? 0;
+    try {
+      const session = await prisma.practice_sessions.findUnique({
+        where: { id: sessionId },
+      });
 
-    // Cari pasien check-in berikutnya yang nomor antreannya lebih besar dan bukan no-show
-    const nextPatient = await prisma.appointments.findFirst({
-      where: {
+      if (!session) {
+        throw new AppError(404, 'Sesi praktik tidak ditemukan');
+      }
+
+      const currentQueue = session.current_queue_number ?? 0;
+
+      // Cari pasien check-in berikutnya yang nomor antreannya lebih besar dan bukan no-show
+      const nextPatient = await prisma.appointments.findFirst({
+        where: {
+          session_id: sessionId,
+          status: 'done',
+          checked_in_at: { not: null },
+          is_no_show: false,
+          queue_number: { gt: currentQueue },
+        },
+        orderBy: { queue_number: 'asc' },
+      });
+
+      if (!nextPatient || !nextPatient.queue_number) {
+        throw new AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+      }
+
+      const updatedSession = await prisma.practice_sessions.update({
+        where: { id: sessionId },
+        data: { current_queue_number: nextPatient.queue_number },
+      });
+
+      return {
         session_id: sessionId,
-        status: 'done',
-        checked_in_at: { not: null },
-        is_no_show: false,
-        queue_number: { gt: currentQueue },
-      },
-      orderBy: { queue_number: 'asc' },
-    });
-
-    if (!nextPatient || !nextPatient.queue_number) {
-      throw new AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+        called_number: nextPatient.queue_number,
+        current_queue_number: updatedSession.current_queue_number,
+      };
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+      throw new AppError(500, 'Gagal memanggil antrean berikutnya');
     }
-
-    const updatedSession = await prisma.practice_sessions.update({
-      where: { id: sessionId },
-      data: { current_queue_number: nextPatient.queue_number },
-    });
-
-    return {
-      session_id: sessionId,
-      called_number: nextPatient.queue_number,
-      current_queue_number: updatedSession.current_queue_number,
-    };
   }
 
   // Tandai pasien tidak hadir (No-Show)
@@ -265,20 +313,41 @@ export class QueueService {
       if (rpcErr instanceof AppError) throw rpcErr;
     }
 
-    const appointment = await prisma.appointments.findUnique({
-      where: { id: appointmentId },
-    });
+    try {
+      const supabase = getSupabaseClient();
+      const { data: updated, error } = await supabase
+        .from('appointments')
+        .update({ is_no_show: true })
+        .eq('id', appointmentId)
+        .select()
+        .maybeSingle();
 
-    if (!appointment) {
-      throw new AppError(404, 'Data janji temu tidak ditemukan');
+      if (!error && updated) {
+        return updated;
+      }
+    } catch {
+      // Prisma fallback
     }
 
-    const updated = await prisma.appointments.update({
-      where: { id: appointmentId },
-      data: { is_no_show: true },
-    });
+    try {
+      const appointment = await prisma.appointments.findUnique({
+        where: { id: appointmentId },
+      });
 
-    return updated;
+      if (!appointment) {
+        throw new AppError(404, 'Data janji temu tidak ditemukan');
+      }
+
+      const updated = await prisma.appointments.update({
+        where: { id: appointmentId },
+        data: { is_no_show: true },
+      });
+
+      return updated;
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+      throw new AppError(500, 'Gagal menandai pasien no-show');
+    }
   }
 }
 

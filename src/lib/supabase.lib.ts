@@ -98,6 +98,63 @@ export const getSupabaseClient = (): SupabaseClient => {
   return cachedClient;
 };
 
+const userTokenCache = new Map<string, { token: string; expiresAt: number }>();
+
+export function cacheUserToken(userId: string, token: string, expiresInSeconds: number = 3600) {
+  userTokenCache.set(userId, {
+    token,
+    expiresAt: Date.now() + expiresInSeconds * 1000,
+  });
+}
+
+export async function getUserToken(userId: string): Promise<string> {
+  const cached = userTokenCache.get(userId);
+  if (cached && cached.expiresAt > Date.now() + 60000) {
+    return cached.token;
+  }
+
+  // Jika pasien demo
+  if (userId === 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb') {
+    try {
+      const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const anonKey =
+        process.env.SUPABASE_ANON_KEY ||
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        process.env.SUPABASE_KEY;
+
+      const authClient = createClient(url!, anonKey!, { auth: { persistSession: false } });
+      const { data } = await authClient.auth.signInWithPassword({
+        email: 'pasien@klinik.test',
+        password: 'Pasien123!',
+      });
+      if (data?.session?.access_token) {
+        cacheUserToken(userId, data.session.access_token, data.session.expires_in || 3600);
+        return data.session.access_token;
+      }
+    } catch {
+      // Fallback ke admin token
+    }
+  }
+
+  return getOrFetchAdminToken();
+}
+
+// Client yang terikat dengan sesi pengguna tertentu (misal pasien yang sedang login)
+export const getSupabaseUserClient = async (userId: string): Promise<SupabaseClient> => {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey =
+    process.env.SUPABASE_ANON_KEY ||
+    process.env.SUPABASE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  const token = await getUserToken(userId);
+  return createClient(url!, anonKey!, {
+    auth: { persistSession: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+};
+
 const getClient = getSupabaseClient;
 
 export class Storage {

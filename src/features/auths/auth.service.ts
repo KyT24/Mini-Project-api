@@ -4,7 +4,7 @@ import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Jwt } from '../../lib/jwt.lib';
 import { Bcrypt } from '../../lib/bcrypt.lib';
-import { getSupabaseClient } from '../../lib/supabase.lib';
+import { getSupabaseClient, cacheUserToken } from '../../lib/supabase.lib';
 import {
   userRegisterRequest,
   userLoginRequest,
@@ -82,6 +82,10 @@ export class AuthsService {
 
       if (error || !data.user) {
         throw new AppError(401, 'Email or password is incorrect');
+      }
+
+      if (data.session?.access_token) {
+        cacheUserToken(data.user.id, data.session.access_token, data.session.expires_in || 3600);
       }
 
       // Ambil data profil Supabase

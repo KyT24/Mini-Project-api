@@ -15,20 +15,57 @@ const specialistInclude = {
 
 export class SpecialistService {
   private static async findOrFail(id: string) {
-    const specialist = await prisma.specialists.findUnique({
-      where: { id },
-      include: specialistInclude,
-    });
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-    if (!specialist) throw new AppError(404, 'specialist not found');
+      if (!error && data) return data;
+    } catch {
+      // Prisma fallback
+    }
 
-    return specialist;
+    try {
+      const specialist = await prisma.specialists.findUnique({
+        where: { id },
+        include: specialistInclude,
+      });
+
+      if (specialist) return specialist;
+    } catch {
+      // Ignore Prisma error
+    }
+
+    throw new AppError(404, 'specialist not found');
   }
 
   private static async assertNameAvailable(name: string, exceptId?: string) {
-    const existing = await prisma.specialists.findUnique({ where: { name } });
-    if (existing && existing.id !== exceptId) {
-      throw new AppError(409, 'specialist name already registered');
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .select('id')
+        .eq('name', name)
+        .maybeSingle();
+
+      if (!error && data && data.id !== exceptId) {
+        throw new AppError(409, 'specialist name already registered');
+      }
+      if (!error && (!data || data.id === exceptId)) return;
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+    }
+
+    try {
+      const existing = await prisma.specialists.findUnique({ where: { name } });
+      if (existing && existing.id !== exceptId) {
+        throw new AppError(409, 'specialist name already registered');
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
     }
   }
 

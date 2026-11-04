@@ -19,20 +19,61 @@ const specialistInclude = {
 class SpecialistService {
     static findOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
-                where: { id },
-                include: specialistInclude,
-            });
-            if (!specialist)
-                throw new app_error_1.AppError(404, 'specialist not found');
-            return specialist;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .select('*')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data)
+                    return data;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
+                    where: { id },
+                    include: specialistInclude,
+                });
+                if (specialist)
+                    return specialist;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'specialist not found');
         });
     }
     static assertNameAvailable(name, exceptId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const existing = yield prisma_client_config_1.prisma.specialists.findUnique({ where: { name } });
-            if (existing && existing.id !== exceptId) {
-                throw new app_error_1.AppError(409, 'specialist name already registered');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .select('id')
+                    .eq('name', name)
+                    .maybeSingle();
+                if (!error && data && data.id !== exceptId) {
+                    throw new app_error_1.AppError(409, 'specialist name already registered');
+                }
+                if (!error && (!data || data.id === exceptId))
+                    return;
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+            }
+            try {
+                const existing = yield prisma_client_config_1.prisma.specialists.findUnique({ where: { name } });
+                if (existing && existing.id !== exceptId) {
+                    throw new app_error_1.AppError(409, 'specialist name already registered');
+                }
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
             }
         });
     }

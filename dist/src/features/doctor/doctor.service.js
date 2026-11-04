@@ -50,24 +50,65 @@ const orderBy = {
 class DoctorService {
     static findOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({
-                where: { id },
-                include: doctorInclude,
-            });
-            if (!doctor)
-                throw new app_error_1.AppError(404, 'doctor not found');
-            return doctor;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .select(`
+          *,
+          specialists:specialist_id(id, name, description),
+          doctor_schedules(*)
+        `)
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data)
+                    return data;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({
+                    where: { id },
+                    include: doctorInclude,
+                });
+                if (doctor)
+                    return doctor;
+            }
+            catch (_b) {
+                // Ignore Prisma connection error
+            }
+            throw new app_error_1.AppError(404, 'doctor not found');
         });
     }
     static assertSpecialistExists(specialistId) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!specialistId)
                 return;
-            const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
-                where: { id: specialistId },
-            });
-            if (!specialist)
-                throw new app_error_1.AppError(404, 'specialist not found');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .select('id')
+                    .eq('id', specialistId)
+                    .maybeSingle();
+                if (!error && data)
+                    return;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
+                    where: { id: specialistId },
+                });
+                if (specialist)
+                    return;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'specialist not found');
         });
     }
     static create(_a) {

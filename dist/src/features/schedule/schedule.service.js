@@ -32,23 +32,94 @@ const scheduleOrder = [
 class ScheduleService {
     static findOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findUnique({ where: { id } });
-            if (!schedule)
-                throw new app_error_1.AppError(404, 'schedule not found');
-            return schedule;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .select('*')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findUnique({ where: { id } });
+                if (schedule)
+                    return schedule;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'schedule not found');
         });
     }
     static assertDoctorExists(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
-            if (!doctor)
-                throw new app_error_1.AppError(404, 'doctor not found');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .select('id')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data)
+                    return;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
+                if (doctor)
+                    return;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'doctor not found');
         });
     }
     // Jam praktik di hari yang sama tidak boleh beririsan (jadwal nonaktif ikut dicek
     // agar tidak bentrok saat diaktifkan lagi)
     static assertNoOverlap(doctorId, day, start, end, exceptId) {
         return __awaiter(this, void 0, void 0, function* () {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase
+                    .from('doctor_schedules')
+                    .select('*')
+                    .eq('doctor_id', doctorId)
+                    .eq('day_of_week', day)
+                    .lt('start_time', `${end}:00`)
+                    .gt('end_time', `${start}:00`);
+                if (exceptId) {
+                    q = q.neq('id', exceptId);
+                }
+                const { data: clashes } = yield q;
+                if (clashes && clashes.length > 0) {
+                    const clash = clashes[0];
+                    throw new app_error_1.AppError(409, `schedule overlaps with ${(clash.start_time || '').slice(0, 5)}-${(clash.end_time || '').slice(0, 5)}`);
+                }
+                return;
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+            }
             // Bentrok jika jadwal lain mulai sebelum jadwal ini selesai
             // dan selesai setelah jadwal ini mulai
             const where = {
@@ -61,9 +132,15 @@ class ScheduleService {
             if (exceptId) {
                 where.NOT = { id: exceptId };
             }
-            const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({ where });
-            if (clash) {
-                throw new app_error_1.AppError(409, `schedule overlaps with ${(0, time_lib_1.fromDbTime)(clash.start_time)}-${(0, time_lib_1.fromDbTime)(clash.end_time)}`);
+            try {
+                const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({ where });
+                if (clash) {
+                    throw new app_error_1.AppError(409, `schedule overlaps with ${(0, time_lib_1.fromDbTime)(clash.start_time)}-${(0, time_lib_1.fromDbTime)(clash.end_time)}`);
+                }
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
             }
         });
     }

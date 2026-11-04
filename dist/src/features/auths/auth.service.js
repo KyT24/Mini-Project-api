@@ -84,7 +84,7 @@ class AuthsService {
     }
     static login(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
-            var _b, _c, _d, _e;
+            var _b, _c, _d, _e, _f;
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
                 const { data, error } = yield supabase.auth.signInWithPassword({
@@ -94,19 +94,22 @@ class AuthsService {
                 if (error || !data.user) {
                     throw new app_error_1.AppError(401, 'Email or password is incorrect');
                 }
+                if ((_b = data.session) === null || _b === void 0 ? void 0 : _b.access_token) {
+                    (0, supabase_lib_1.cacheUserToken)(data.user.id, data.session.access_token, data.session.expires_in || 3600);
+                }
                 // Ambil data profil Supabase
                 const { data: profile } = yield supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', data.user.id)
                     .maybeSingle();
-                const roleStr = ((profile === null || profile === void 0 ? void 0 : profile.role) || ((_b = data.user.user_metadata) === null || _b === void 0 ? void 0 : _b.role) || 'patient').toUpperCase();
+                const roleStr = ((profile === null || profile === void 0 ? void 0 : profile.role) || ((_c = data.user.user_metadata) === null || _c === void 0 ? void 0 : _c.role) || 'patient').toUpperCase();
                 const role = roleStr === 'ADMIN' ? 'ADMIN' : 'PATIENT';
                 const user = {
                     id: data.user.id,
-                    email: (_c = data.user.email) !== null && _c !== void 0 ? _c : body.email,
-                    full_name: (profile === null || profile === void 0 ? void 0 : profile.full_name) || ((_d = data.user.user_metadata) === null || _d === void 0 ? void 0 : _d.full_name) || 'Pengguna',
-                    phone_number: (profile === null || profile === void 0 ? void 0 : profile.phone_number) || ((_e = data.user.user_metadata) === null || _e === void 0 ? void 0 : _e.phone_number) || '',
+                    email: (_d = data.user.email) !== null && _d !== void 0 ? _d : body.email,
+                    full_name: (profile === null || profile === void 0 ? void 0 : profile.full_name) || ((_e = data.user.user_metadata) === null || _e === void 0 ? void 0 : _e.full_name) || 'Pengguna',
+                    phone_number: (profile === null || profile === void 0 ? void 0 : profile.phone_number) || ((_f = data.user.user_metadata) === null || _f === void 0 ? void 0 : _f.phone_number) || '',
                     role,
                     profile_picture: (profile === null || profile === void 0 ? void 0 : profile.avatar_url) || null,
                     is_active: true,

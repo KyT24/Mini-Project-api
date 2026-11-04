@@ -197,7 +197,7 @@ class QueueService {
     // Panggil antrean berikutnya (Call Next)
     static callNext(sessionId) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
+            var _a, _b, _c;
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
                 const { data, error } = yield supabase.rpc('call_next', { p_session_id: sessionId });
@@ -212,36 +212,83 @@ class QueueService {
                 if (rpcErr instanceof app_error_1.AppError)
                     throw rpcErr;
             }
-            const session = yield prisma_client_config_1.prisma.practice_sessions.findUnique({
-                where: { id: sessionId },
-            });
-            if (!session) {
-                throw new app_error_1.AppError(404, 'Sesi praktik tidak ditemukan');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: session } = yield supabase
+                    .from('practice_sessions')
+                    .select('*')
+                    .eq('id', sessionId)
+                    .maybeSingle();
+                if (session) {
+                    const currentQueue = (_a = session.current_queue_number) !== null && _a !== void 0 ? _a : 0;
+                    const { data: nextPatient } = yield supabase
+                        .from('appointments')
+                        .select('*')
+                        .eq('session_id', sessionId)
+                        .eq('status', 'done')
+                        .not('checked_in_at', 'is', null)
+                        .eq('is_no_show', false)
+                        .gt('queue_number', currentQueue)
+                        .order('queue_number', { ascending: true })
+                        .limit(1)
+                        .maybeSingle();
+                    if (!nextPatient || !nextPatient.queue_number) {
+                        throw new app_error_1.AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+                    }
+                    const { data: updatedSession } = yield supabase
+                        .from('practice_sessions')
+                        .update({ current_queue_number: nextPatient.queue_number })
+                        .eq('id', sessionId)
+                        .select()
+                        .single();
+                    return {
+                        session_id: sessionId,
+                        called_number: nextPatient.queue_number,
+                        current_queue_number: (_b = updatedSession === null || updatedSession === void 0 ? void 0 : updatedSession.current_queue_number) !== null && _b !== void 0 ? _b : nextPatient.queue_number,
+                    };
+                }
             }
-            const currentQueue = (_a = session.current_queue_number) !== null && _a !== void 0 ? _a : 0;
-            // Cari pasien check-in berikutnya yang nomor antreannya lebih besar dan bukan no-show
-            const nextPatient = yield prisma_client_config_1.prisma.appointments.findFirst({
-                where: {
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+            }
+            try {
+                const session = yield prisma_client_config_1.prisma.practice_sessions.findUnique({
+                    where: { id: sessionId },
+                });
+                if (!session) {
+                    throw new app_error_1.AppError(404, 'Sesi praktik tidak ditemukan');
+                }
+                const currentQueue = (_c = session.current_queue_number) !== null && _c !== void 0 ? _c : 0;
+                // Cari pasien check-in berikutnya yang nomor antreannya lebih besar dan bukan no-show
+                const nextPatient = yield prisma_client_config_1.prisma.appointments.findFirst({
+                    where: {
+                        session_id: sessionId,
+                        status: 'done',
+                        checked_in_at: { not: null },
+                        is_no_show: false,
+                        queue_number: { gt: currentQueue },
+                    },
+                    orderBy: { queue_number: 'asc' },
+                });
+                if (!nextPatient || !nextPatient.queue_number) {
+                    throw new app_error_1.AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+                }
+                const updatedSession = yield prisma_client_config_1.prisma.practice_sessions.update({
+                    where: { id: sessionId },
+                    data: { current_queue_number: nextPatient.queue_number },
+                });
+                return {
                     session_id: sessionId,
-                    status: 'done',
-                    checked_in_at: { not: null },
-                    is_no_show: false,
-                    queue_number: { gt: currentQueue },
-                },
-                orderBy: { queue_number: 'asc' },
-            });
-            if (!nextPatient || !nextPatient.queue_number) {
-                throw new app_error_1.AppError(404, 'Tidak ada antrean pasien berikutnya yang sedang menunggu');
+                    called_number: nextPatient.queue_number,
+                    current_queue_number: updatedSession.current_queue_number,
+                };
             }
-            const updatedSession = yield prisma_client_config_1.prisma.practice_sessions.update({
-                where: { id: sessionId },
-                data: { current_queue_number: nextPatient.queue_number },
-            });
-            return {
-                session_id: sessionId,
-                called_number: nextPatient.queue_number,
-                current_queue_number: updatedSession.current_queue_number,
-            };
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+                throw new app_error_1.AppError(500, 'Gagal memanggil antrean berikutnya');
+            }
         });
     }
     // Tandai pasien tidak hadir (No-Show)
@@ -261,17 +308,39 @@ class QueueService {
                 if (rpcErr instanceof app_error_1.AppError)
                     throw rpcErr;
             }
-            const appointment = yield prisma_client_config_1.prisma.appointments.findUnique({
-                where: { id: appointmentId },
-            });
-            if (!appointment) {
-                throw new app_error_1.AppError(404, 'Data janji temu tidak ditemukan');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: updated, error } = yield supabase
+                    .from('appointments')
+                    .update({ is_no_show: true })
+                    .eq('id', appointmentId)
+                    .select()
+                    .maybeSingle();
+                if (!error && updated) {
+                    return updated;
+                }
             }
-            const updated = yield prisma_client_config_1.prisma.appointments.update({
-                where: { id: appointmentId },
-                data: { is_no_show: true },
-            });
-            return updated;
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const appointment = yield prisma_client_config_1.prisma.appointments.findUnique({
+                    where: { id: appointmentId },
+                });
+                if (!appointment) {
+                    throw new app_error_1.AppError(404, 'Data janji temu tidak ditemukan');
+                }
+                const updated = yield prisma_client_config_1.prisma.appointments.update({
+                    where: { id: appointmentId },
+                    data: { is_no_show: true },
+                });
+                return updated;
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+                throw new app_error_1.AppError(500, 'Gagal menandai pasien no-show');
+            }
         });
     }
 }

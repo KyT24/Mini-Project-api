@@ -47,43 +47,48 @@ class PatientService {
             catch (_a) {
                 // Continue to Prisma fallback
             }
-            const profile = yield prisma_client_config_1.prisma.profiles.findUnique({
-                where: { id: userId },
-            });
-            if (profile) {
-                return {
-                    id: profile.id,
-                    email: '',
-                    full_name: profile.full_name,
-                    phone_number: profile.phone_number,
-                    role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
-                    profile_picture: profile.avatar_url,
-                    avatar_url: profile.avatar_url,
-                    patient_profiles: {
+            try {
+                const profile = yield prisma_client_config_1.prisma.profiles.findUnique({
+                    where: { id: userId },
+                });
+                if (profile) {
+                    return {
                         id: profile.id,
+                        email: '',
+                        full_name: profile.full_name,
+                        phone_number: profile.phone_number,
+                        role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
+                        profile_picture: profile.avatar_url,
+                        avatar_url: profile.avatar_url,
+                        patient_profiles: {
+                            id: profile.id,
+                            date_of_birth: profile.date_of_birth,
+                            gender: profile.gender,
+                            address: profile.address,
+                        },
                         date_of_birth: profile.date_of_birth,
                         gender: profile.gender,
                         address: profile.address,
-                    },
-                    date_of_birth: profile.date_of_birth,
-                    gender: profile.gender,
-                    address: profile.address,
-                };
+                    };
+                }
+                const legacyUser = yield prisma_client_config_1.prisma.user.findUnique({
+                    where: { id: userId },
+                });
+                if (legacyUser) {
+                    return {
+                        id: legacyUser.id,
+                        email: legacyUser.email,
+                        full_name: legacyUser.full_name,
+                        phone_number: legacyUser.phone_number,
+                        role: legacyUser.role,
+                        profile_picture: legacyUser.profile_picture,
+                        avatar_url: legacyUser.profile_picture,
+                        patient_profiles: null,
+                    };
+                }
             }
-            const legacyUser = yield prisma_client_config_1.prisma.user.findUnique({
-                where: { id: userId },
-            });
-            if (legacyUser) {
-                return {
-                    id: legacyUser.id,
-                    email: legacyUser.email,
-                    full_name: legacyUser.full_name,
-                    phone_number: legacyUser.phone_number,
-                    role: legacyUser.role,
-                    profile_picture: legacyUser.profile_picture,
-                    avatar_url: legacyUser.profile_picture,
-                    patient_profiles: null,
-                };
+            catch (_b) {
+                // Ignore Prisma error
             }
             throw new app_error_1.AppError(404, 'patient not found');
         });

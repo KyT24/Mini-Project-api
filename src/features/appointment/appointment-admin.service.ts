@@ -36,14 +36,49 @@ const omitQr = { qr_token: true } satisfies Prisma.appointmentsOmit;
 
 export class AppointmentAdminService {
   private static async findOrFail(id: string, db: Tx | typeof prisma = prisma) {
-    const appointment = await db.appointments.findUnique({
-      where: { id },
-      include: adminInclude,
-      omit: omitQr,
-    });
-    if (!appointment) throw new AppError(404, 'appointment not found');
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `)
+        .eq('id', id)
+        .maybeSingle();
 
-    return appointment;
+      if (!error && data) {
+        return {
+          ...data,
+          patient_profiles: {
+            id: data.patient_id,
+            users: {
+              full_name: data.profiles?.full_name || 'Pasien',
+              email: '',
+              phone_number: data.profiles?.phone_number || null,
+            },
+          },
+        } as any;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
+    try {
+      const appointment = await db.appointments.findUnique({
+        where: { id },
+        include: adminInclude,
+        omit: omitQr,
+      });
+      if (appointment) return appointment;
+    } catch {
+      // Ignore Prisma error
+    }
+
+    throw new AppError(404, 'appointment not found');
   }
 
   static async getAll({ query }: getAdminAppointmentsRequest) {

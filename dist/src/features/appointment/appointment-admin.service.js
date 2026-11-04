@@ -30,14 +30,47 @@ const omitQr = { qr_token: true };
 class AppointmentAdminService {
     static findOrFail(id_1) {
         return __awaiter(this, arguments, void 0, function* (id, db = prisma_client_config_1.prisma) {
-            const appointment = yield db.appointments.findUnique({
-                where: { id },
-                include: adminInclude,
-                omit: omitQr,
-            });
-            if (!appointment)
-                throw new app_error_1.AppError(404, 'appointment not found');
-            return appointment;
+            var _a, _b;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('appointments')
+                    .select(`
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `)
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data) {
+                    return Object.assign(Object.assign({}, data), { patient_profiles: {
+                            id: data.patient_id,
+                            users: {
+                                full_name: ((_a = data.profiles) === null || _a === void 0 ? void 0 : _a.full_name) || 'Pasien',
+                                email: '',
+                                phone_number: ((_b = data.profiles) === null || _b === void 0 ? void 0 : _b.phone_number) || null,
+                            },
+                        } });
+                }
+            }
+            catch (_c) {
+                // Prisma fallback
+            }
+            try {
+                const appointment = yield db.appointments.findUnique({
+                    where: { id },
+                    include: adminInclude,
+                    omit: omitQr,
+                });
+                if (appointment)
+                    return appointment;
+            }
+            catch (_d) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'appointment not found');
         });
     }
     static getAll(_a) {

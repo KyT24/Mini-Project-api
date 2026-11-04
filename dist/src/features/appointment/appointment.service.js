@@ -40,10 +40,30 @@ class AppointmentService {
     }
     static findActiveDoctorOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
-            if (!doctor || !doctor.is_active)
-                throw new app_error_1.AppError(404, 'doctor not found');
-            return doctor;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: doc, error } = yield supabase
+                    .from('doctors')
+                    .select('*')
+                    .eq('id', id)
+                    .eq('is_active', true)
+                    .maybeSingle();
+                if (!error && doc) {
+                    return doc;
+                }
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
+                if (doctor && doctor.is_active)
+                    return doctor;
+            }
+            catch (_b) {
+                // Ignore Prisma connection error, treat as not found
+            }
+            throw new app_error_1.AppError(404, 'doctor not found');
         });
     }
     static getAvailability(_a) {
@@ -74,74 +94,103 @@ class AppointmentService {
             }
             yield this.findActiveDoctorOrFail(doctor_id);
             yield (0, appointment_helpers_1.syncStatuses)();
-            const now = new Date();
-            const [schedules, sessions] = yield Promise.all([
-                prisma_client_config_1.prisma.doctor_schedules.findMany({
-                    where: { doctor_id, day_of_week: (0, time_lib_1.dayOfWeek)(date), is_active: true },
-                    orderBy: { start_time: 'asc' },
-                }),
-                prisma_client_config_1.prisma.practice_sessions.findMany({
-                    where: { doctor_id, session_date: (0, time_lib_1.toDbDate)(date) },
-                    select: {
-                        start_time: true,
-                        end_time: true,
-                        patient_quota: true,
-                        appointments: { where: (0, appointment_helpers_1.holdsQuota)(now), select: { id: true } },
-                    },
-                }),
-            ]);
-            // Sesi yang sudah terbentuk memakai kuota saat dibuat, selain itu ikut jadwal
-            const slots = schedules.map((schedule) => {
-                var _a, _b, _c;
-                const start_time = (0, time_lib_1.fromDbTime)(schedule.start_time);
-                const session = sessions.find((item) => (0, time_lib_1.fromDbTime)(item.start_time) === start_time);
-                const quota = (_a = session === null || session === void 0 ? void 0 : session.patient_quota) !== null && _a !== void 0 ? _a : schedule.patient_quota;
-                const booked = (_b = session === null || session === void 0 ? void 0 : session.appointments.length) !== null && _b !== void 0 ? _b : 0;
-                const remaining = Math.max(quota - booked, 0);
-                const isPast = (0, appointment_helpers_1.slotStartsAt)(date, start_time) <= now;
-                return {
-                    start_time,
-                    end_time: (0, time_lib_1.fromDbTime)((_c = session === null || session === void 0 ? void 0 : session.end_time) !== null && _c !== void 0 ? _c : schedule.end_time),
-                    quota,
-                    booked,
-                    remaining,
-                    available: !isPast && remaining > 0,
-                };
-            });
-            return { doctor_id, date, slots };
+            // 2. Fallback query langsung Supabase PostgREST
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: schedules } = yield supabase
+                    .from('doctor_schedules')
+                    .select('*')
+                    .eq('doctor_id', doctor_id)
+                    .eq('day_of_week', (0, time_lib_1.dayOfWeek)(date))
+                    .eq('is_active', true)
+                    .order('start_time', { ascending: true });
+                if (schedules && schedules.length > 0) {
+                    const { data: sessions } = yield supabase
+                        .from('practice_sessions')
+                        .select('*, appointments(id, status, payment_deadline)')
+                        .eq('doctor_id', doctor_id)
+                        .eq('session_date', date);
+                    const now = new Date();
+                    const slots = schedules.map((schedule) => {
+                        var _a;
+                        const startTimeStr = (schedule.start_time || '').slice(0, 5);
+                        const session = (sessions || []).find((s) => (s.start_time || '').slice(0, 5) === startTimeStr);
+                        const quota = (_a = session === null || session === void 0 ? void 0 : session.patient_quota) !== null && _a !== void 0 ? _a : schedule.patient_quota;
+                        const booked = ((session === null || session === void 0 ? void 0 : session.appointments) || []).filter((a) => a.status === 'done' ||
+                            a.status === 'waiting_confirmation' ||
+                            (a.status === 'waiting_payment' && new Date(a.payment_deadline) > now)).length;
+                        const remaining = Math.max(quota - booked, 0);
+                        const isPast = (0, appointment_helpers_1.slotStartsAt)(date, startTimeStr) <= now;
+                        return {
+                            start_time: startTimeStr,
+                            end_time: ((session === null || session === void 0 ? void 0 : session.end_time) || schedule.end_time || '').slice(0, 5),
+                            quota,
+                            booked,
+                            remaining,
+                            available: !isPast && remaining > 0,
+                        };
+                    });
+                    return { doctor_id, date, slots };
+                }
+            }
+            catch (_c) {
+                // Prisma fallback
+            }
+            try {
+                const now = new Date();
+                const [schedules, sessions] = yield Promise.all([
+                    prisma_client_config_1.prisma.doctor_schedules.findMany({
+                        where: { doctor_id, day_of_week: (0, time_lib_1.dayOfWeek)(date), is_active: true },
+                        orderBy: { start_time: 'asc' },
+                    }),
+                    prisma_client_config_1.prisma.practice_sessions.findMany({
+                        where: { doctor_id, session_date: (0, time_lib_1.toDbDate)(date) },
+                        select: {
+                            start_time: true,
+                            end_time: true,
+                            patient_quota: true,
+                            appointments: { where: (0, appointment_helpers_1.holdsQuota)(now), select: { id: true } },
+                        },
+                    }),
+                ]);
+                // Sesi yang sudah terbentuk memakai kuota saat dibuat, selain itu ikut jadwal
+                const slots = schedules.map((schedule) => {
+                    var _a, _b, _c;
+                    const start_time = (0, time_lib_1.fromDbTime)(schedule.start_time);
+                    const session = sessions.find((item) => (0, time_lib_1.fromDbTime)(item.start_time) === start_time);
+                    const quota = (_a = session === null || session === void 0 ? void 0 : session.patient_quota) !== null && _a !== void 0 ? _a : schedule.patient_quota;
+                    const booked = (_b = session === null || session === void 0 ? void 0 : session.appointments.length) !== null && _b !== void 0 ? _b : 0;
+                    const remaining = Math.max(quota - booked, 0);
+                    const isPast = (0, appointment_helpers_1.slotStartsAt)(date, start_time) <= now;
+                    return {
+                        start_time,
+                        end_time: (0, time_lib_1.fromDbTime)((_c = session === null || session === void 0 ? void 0 : session.end_time) !== null && _c !== void 0 ? _c : schedule.end_time),
+                        quota,
+                        booked,
+                        remaining,
+                        available: !isPast && remaining > 0,
+                    };
+                });
+                return { doctor_id, date, slots };
+            }
+            catch (_d) {
+                return { doctor_id, date, slots: [] };
+            }
         });
     }
     static create(userId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (userId, { body }) {
-            var _b;
             const { doctor_id, session_date, start_time } = body;
             this.assertBookableDate(session_date);
             const startsAt = (0, appointment_helpers_1.slotStartsAt)(session_date, start_time);
             if (startsAt <= new Date())
                 throw new app_error_1.AppError(422, 'Schedule has already started');
             const doctor = yield this.findActiveDoctorOrFail(doctor_id);
-            // Pastikan profil pasien ada di Supabase / Prisma
+            // 1. Coba booking via Supabase RPC book_appointment dengan sesi user
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                yield supabase.from('profiles').upsert({ id: userId, full_name: 'Pasien' }, { onConflict: 'id' });
-            }
-            catch (_c) {
-                // Continue
-            }
-            try {
-                yield prisma_client_config_1.prisma.profiles.upsert({
-                    where: { id: userId },
-                    create: { id: userId, full_name: 'Pasien' },
-                    update: {},
-                });
-            }
-            catch (_d) {
-                // Continue
-            }
-            // 1. Coba booking langsung di Supabase PostgREST
-            try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                const { data: scheduleData } = yield supabase
+                const userSupabase = yield (0, supabase_lib_1.getSupabaseUserClient)(userId);
+                const adminSupabase = (0, supabase_lib_1.getSupabaseClient)();
+                let { data: scheduleData } = yield adminSupabase
                     .from('doctor_schedules')
                     .select('*')
                     .eq('doctor_id', doctor_id)
@@ -149,72 +198,50 @@ class AppointmentService {
                     .eq('is_active', true)
                     .gte('start_time', `${start_time}:00`)
                     .lte('start_time', `${start_time}:59`)
-                    .single();
-                if (scheduleData) {
-                    let { data: sessionData } = yield supabase
-                        .from('practice_sessions')
+                    .maybeSingle();
+                if (!scheduleData) {
+                    const { data: coveringSchedule } = yield adminSupabase
+                        .from('doctor_schedules')
                         .select('*')
                         .eq('doctor_id', doctor_id)
-                        .eq('session_date', session_date)
-                        .eq('start_time', scheduleData.start_time)
+                        .eq('day_of_week', (0, time_lib_1.dayOfWeek)(session_date))
+                        .eq('is_active', true)
+                        .lte('start_time', `${start_time}:59`)
+                        .gt('end_time', `${start_time}:00`)
                         .maybeSingle();
-                    let sessionId = sessionData === null || sessionData === void 0 ? void 0 : sessionData.id;
-                    const quota = (_b = sessionData === null || sessionData === void 0 ? void 0 : sessionData.patient_quota) !== null && _b !== void 0 ? _b : scheduleData.patient_quota;
-                    if (!sessionId) {
-                        const { data: newSession } = yield supabase
-                            .from('practice_sessions')
-                            .insert({
-                            doctor_id,
-                            schedule_id: scheduleData.id,
-                            session_date,
-                            start_time: scheduleData.start_time,
-                            end_time: scheduleData.end_time,
-                            starts_at: startsAt.toISOString(),
-                            ends_at: (0, appointment_helpers_1.slotStartsAt)(session_date, scheduleData.end_time.slice(0, 5)).toISOString(),
-                            patient_quota: scheduleData.patient_quota,
-                        })
-                            .select()
-                            .single();
-                        if (newSession)
-                            sessionId = newSession.id;
-                    }
-                    if (sessionId) {
-                        const { data: existingAppts } = yield supabase
+                    scheduleData = coveringSchedule;
+                }
+                if (scheduleData) {
+                    const { data: bookedAppt, error: bookErr } = yield userSupabase.rpc('book_appointment', {
+                        p_schedule_id: scheduleData.id,
+                        p_date: session_date,
+                    });
+                    if (!bookErr && bookedAppt) {
+                        const { data: fullAppt } = yield adminSupabase
                             .from('appointments')
-                            .select('id, patient_id, status')
-                            .eq('session_id', sessionId)
-                            .in('status', ['waiting_payment', 'waiting_confirmation', 'done']);
-                        const alreadyBooked = existingAppts === null || existingAppts === void 0 ? void 0 : existingAppts.some((a) => a.patient_id === userId);
-                        if (alreadyBooked)
-                            throw new app_error_1.AppError(409, 'You already have a booking on this schedule');
-                        if (((existingAppts === null || existingAppts === void 0 ? void 0 : existingAppts.length) || 0) >= quota) {
-                            throw new app_error_1.AppError(409, 'Doctor quota for this schedule is full');
-                        }
-                        const now = Date.now();
-                        const holdUntil = now + appointment_constants_1.PAYMENT_HOLD_MINUTES * 60 * 1000;
-                        const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
-                        const apptCode = generateCode(session_date);
-                        const { data: createdAppt, error: createErr } = yield supabase
-                            .from('appointments')
-                            .insert({
-                            patient_id: userId,
-                            doctor_id,
-                            session_id: sessionId,
-                            code: apptCode,
-                            consultation_fee: doctor.consultation_fee,
-                            payment_deadline: paymentDeadline.toISOString(),
-                            status: 'waiting_payment',
-                            booking_number: ((existingAppts === null || existingAppts === void 0 ? void 0 : existingAppts.length) || 0) + 1,
-                        })
                             .select(`
               *,
               doctors:doctor_id(id, full_name, photo_url),
               practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
               ratings(id, rating, review, created_at)
             `)
-                            .single();
-                        if (!createErr && createdAppt) {
-                            return Object.assign(Object.assign({}, createdAppt), { payment_deadline: new Date(createdAppt.payment_deadline), created_at: new Date(createdAppt.created_at), updated_at: new Date(createdAppt.updated_at), practice_sessions: Object.assign(Object.assign({}, createdAppt.practice_sessions), { session_date: new Date(createdAppt.practice_sessions.session_date), start_time: new Date(`${createdAppt.practice_sessions.session_date}T${createdAppt.practice_sessions.start_time}`), end_time: new Date(`${createdAppt.practice_sessions.session_date}T${createdAppt.practice_sessions.end_time}`) }) });
+                            .eq('id', bookedAppt.id)
+                            .maybeSingle();
+                        const result = fullAppt || bookedAppt;
+                        return Object.assign(Object.assign({}, result), { payment_deadline: new Date(result.payment_deadline), created_at: new Date(result.created_at), updated_at: new Date(result.updated_at), practice_sessions: result.practice_sessions
+                                ? Object.assign(Object.assign({}, result.practice_sessions), { session_date: new Date(result.practice_sessions.session_date), start_time: new Date(`${result.practice_sessions.session_date}T${result.practice_sessions.start_time}`), end_time: new Date(`${result.practice_sessions.session_date}T${result.practice_sessions.end_time}`) }) : undefined });
+                    }
+                    if (bookErr) {
+                        const msg = bookErr.message || '';
+                        if (msg.includes('penuh') ||
+                            msg.includes('full') ||
+                            msg.includes('kuota') ||
+                            msg.includes('sudah punya') ||
+                            msg.includes('already')) {
+                            throw new app_error_1.AppError(409, msg);
+                        }
+                        if (msg.includes('sudah lewat') || msg.includes('selesai')) {
+                            throw new app_error_1.AppError(422, msg);
                         }
                     }
                 }
@@ -222,72 +249,78 @@ class AppointmentService {
             catch (e) {
                 if (e instanceof app_error_1.AppError)
                     throw e;
-                // Prisma fallback
             }
-            // 2. Prisma Fallback
-            const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({
-                where: {
-                    doctor_id,
-                    day_of_week: (0, time_lib_1.dayOfWeek)(session_date),
-                    start_time: (0, time_lib_1.toDbTime)(start_time),
-                    is_active: true,
-                },
-            });
-            if (!schedule)
-                throw new app_error_1.AppError(422, 'Schedule is not available');
-            return yield prisma_client_config_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
-                yield (0, appointment_helpers_1.syncStatuses)(tx);
-                const session = yield tx.practice_sessions.upsert({
+            // 2. Prisma Fallback (hanya dijalankan jika Prisma terhubung)
+            try {
+                const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({
                     where: {
-                        doctor_id_session_date_start_time: {
+                        doctor_id,
+                        day_of_week: (0, time_lib_1.dayOfWeek)(session_date),
+                        start_time: (0, time_lib_1.toDbTime)(start_time),
+                        is_active: true,
+                    },
+                });
+                if (!schedule)
+                    throw new app_error_1.AppError(422, 'Schedule is not available');
+                return yield prisma_client_config_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
+                    yield (0, appointment_helpers_1.syncStatuses)(tx);
+                    const session = yield tx.practice_sessions.upsert({
+                        where: {
+                            doctor_id_session_date_start_time: {
+                                doctor_id,
+                                session_date: (0, time_lib_1.toDbDate)(session_date),
+                                start_time: (0, time_lib_1.toDbTime)(start_time),
+                            },
+                        },
+                        create: {
                             doctor_id,
+                            schedule_id: schedule.id,
                             session_date: (0, time_lib_1.toDbDate)(session_date),
                             start_time: (0, time_lib_1.toDbTime)(start_time),
+                            end_time: schedule.end_time,
+                            starts_at: startsAt,
+                            ends_at: (0, appointment_helpers_1.slotStartsAt)(session_date, (0, time_lib_1.fromDbTime)(schedule.end_time)),
+                            patient_quota: schedule.patient_quota,
+                            current_queue_number: 0,
                         },
-                    },
-                    create: {
-                        doctor_id,
-                        schedule_id: schedule.id,
-                        session_date: (0, time_lib_1.toDbDate)(session_date),
-                        start_time: (0, time_lib_1.toDbTime)(start_time),
-                        end_time: schedule.end_time,
-                        starts_at: startsAt,
-                        ends_at: (0, appointment_helpers_1.slotStartsAt)(session_date, (0, time_lib_1.fromDbTime)(schedule.end_time)),
-                        patient_quota: schedule.patient_quota,
-                        current_queue_number: 0,
-                    },
-                    update: {},
-                });
-                yield (0, appointment_helpers_1.lockSession)(tx, session.id);
-                const now = new Date();
-                const [booked, ownBooking] = yield Promise.all([
-                    tx.appointments.count({ where: Object.assign({ session_id: session.id }, (0, appointment_helpers_1.holdsQuota)(now)) }),
-                    tx.appointments.findFirst({
-                        where: Object.assign({ session_id: session.id, patient_id: userId }, (0, appointment_helpers_1.holdsQuota)(now)),
-                    }),
-                ]);
-                if (ownBooking) {
-                    throw new app_error_1.AppError(409, 'You already have a booking on this schedule');
-                }
-                if (booked >= session.patient_quota) {
-                    throw new app_error_1.AppError(409, 'Doctor quota for this schedule is full');
-                }
-                const consultationFee = doctor.consultation_fee;
-                const holdUntil = now.getTime() + appointment_constants_1.PAYMENT_HOLD_MINUTES * 60 * 1000;
-                const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
-                const apptCode = generateCode(session_date);
-                return yield tx.appointments.create({
-                    data: {
-                        patient_id: userId,
-                        doctor_id,
-                        session_id: session.id,
-                        code: apptCode,
-                        consultation_fee: consultationFee,
-                        payment_deadline: paymentDeadline,
-                    },
-                    include: appointment_helpers_1.appointmentInclude,
-                });
-            }));
+                        update: {},
+                    });
+                    yield (0, appointment_helpers_1.lockSession)(tx, session.id);
+                    const now = new Date();
+                    const [booked, ownBooking] = yield Promise.all([
+                        tx.appointments.count({ where: Object.assign({ session_id: session.id }, (0, appointment_helpers_1.holdsQuota)(now)) }),
+                        tx.appointments.findFirst({
+                            where: Object.assign({ session_id: session.id, patient_id: userId }, (0, appointment_helpers_1.holdsQuota)(now)),
+                        }),
+                    ]);
+                    if (ownBooking) {
+                        throw new app_error_1.AppError(409, 'You already have a booking on this schedule');
+                    }
+                    if (booked >= session.patient_quota) {
+                        throw new app_error_1.AppError(409, 'Doctor quota for this schedule is full');
+                    }
+                    const consultationFee = doctor.consultation_fee;
+                    const holdUntil = now.getTime() + appointment_constants_1.PAYMENT_HOLD_MINUTES * 60 * 1000;
+                    const paymentDeadline = new Date(Math.min(holdUntil, startsAt.getTime()));
+                    const apptCode = generateCode(session_date);
+                    return yield tx.appointments.create({
+                        data: {
+                            patient_id: userId,
+                            doctor_id,
+                            session_id: session.id,
+                            code: apptCode,
+                            consultation_fee: consultationFee,
+                            payment_deadline: paymentDeadline,
+                        },
+                        include: appointment_helpers_1.appointmentInclude,
+                    });
+                }));
+            }
+            catch (prismaErr) {
+                if (prismaErr instanceof app_error_1.AppError)
+                    throw prismaErr;
+                throw new app_error_1.AppError(422, 'Schedule is not available');
+            }
         });
     }
     static findOwnOrFail(userId, id) {
@@ -497,25 +530,10 @@ class AppointmentService {
             else {
                 imageUrl = yield supabase_lib_1.Storage.uploadBase64(`${pathPrefix}.jpg`, imageBase64);
             }
-            // Pastikan batas waktu belum lewat saat file selesai diunggah
-            const updated = yield prisma_client_config_1.prisma.appointments.updateMany({
-                where: {
-                    id: appointment.id,
-                    status: 'waiting_payment',
-                    payment_deadline: { gt: new Date() },
-                },
-                data: {
-                    status: 'waiting_confirmation',
-                    payment_proof_path: imageUrl,
-                    payment_uploaded_at: new Date(),
-                },
-            });
-            if (!updated.count) {
-                throw new app_error_1.AppError(410, 'Payment time has expired, please book again');
-            }
+            // 1. Coba update via Supabase PostgREST terlebih dahulu
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                yield supabase
+                const { data: updatedAppt, error } = yield supabase
                     .from('appointments')
                     .update({
                     status: 'waiting_confirmation',
@@ -523,10 +541,39 @@ class AppointmentService {
                     payment_uploaded_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                 })
-                    .eq('id', appointment.id);
+                    .eq('id', appointment.id)
+                    .eq('status', 'waiting_payment')
+                    .gt('payment_deadline', new Date().toISOString())
+                    .select()
+                    .maybeSingle();
+                if (!error && updatedAppt) {
+                    return this.getOwnById(userId, { params });
+                }
             }
             catch (_b) {
-                // Continue
+                // Prisma fallback
+            }
+            // 2. Prisma fallback
+            try {
+                const updated = yield prisma_client_config_1.prisma.appointments.updateMany({
+                    where: {
+                        id: appointment.id,
+                        status: 'waiting_payment',
+                        payment_deadline: { gt: new Date() },
+                    },
+                    data: {
+                        status: 'waiting_confirmation',
+                        payment_proof_path: imageUrl,
+                        payment_uploaded_at: new Date(),
+                    },
+                });
+                if (!updated.count) {
+                    throw new app_error_1.AppError(410, 'Payment time has expired, please book again');
+                }
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
             }
             return this.getOwnById(userId, { params });
         });
