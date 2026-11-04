@@ -10,8 +10,9 @@ const patientOnly = [verifyToken, verifyRole('PATIENT')];
 
 appointmentRouter.get('/availability', AppointmentController.getAvailability);
 appointmentRouter.post('/', ...patientOnly, AppointmentController.createAppointment);
-// /me harus didaftarkan sebelum /:id agar tidak dianggap sebagai id
+// /me dan /my harus didaftarkan sebelum /:id agar tidak dianggap sebagai id
 appointmentRouter.get('/me', ...patientOnly, AppointmentController.getMyAppointments);
+appointmentRouter.get('/my', ...patientOnly, AppointmentController.getMyAppointments);
 appointmentRouter.get('/:id', ...patientOnly, AppointmentController.getMyAppointmentById);
 appointmentRouter.patch('/:id/cancel', ...patientOnly, AppointmentController.cancelAppointment);
 appointmentRouter.post('/:id/rating', ...patientOnly, AppointmentController.rateAppointment);

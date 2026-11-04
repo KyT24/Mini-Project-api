@@ -74,14 +74,18 @@ const sessionStarted = (): Prisma.practice_sessionsWhereInput => {
 // 1) belum upload bukti sampai batas waktu → expired
 // 2) belum diproses admin saat sesi dimulai → canceled
 export async function syncStatuses(db: Tx | typeof prisma = prisma) {
-  await db.appointments.updateMany({
-    where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },
-    data: { status: 'expired' },
-  });
-  await db.appointments.updateMany({
-    where: { status: 'waiting_confirmation', practice_sessions: sessionStarted() },
-    data: { status: 'canceled' },
-  });
+  try {
+    await db.appointments.updateMany({
+      where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },
+      data: { status: 'expired' },
+    });
+    await db.appointments.updateMany({
+      where: { status: 'waiting_confirmation', practice_sessions: sessionStarted() },
+      data: { status: 'canceled' },
+    });
+  } catch {
+    // Diamkan agar tidak meledakkan endpoint saat koneksi Prisma lokal tidak aktif
+  }
 }
 
 // Kunci baris sesi agar perubahan kuota/antrean tidak balapan

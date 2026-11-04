@@ -184,4 +184,7 @@ vercel --prod
 3. **Ukuran File Upload di Serverless**:
    - *Penyebab*: Batas maksimum body payload Vercel Serverless adalah 4.5 MB.
    - *Solusi*: Kompresi bukti bayar dari frontend sudah di bawah 100 KB, dan upload foto profil dokter dibatasi maksimal 3 MB.
+4. **Error 500 pada `syncStatuses()` di Endpoint `GET /appointments/me`**:
+   - *Penyebab*: Fungsi `syncStatuses()` di `appointment.helpers.ts` memanggil `db.appointments.updateMany()` lewat Prisma tanpa `try/catch`. Bila pooler/koneksi Prisma terputus, ia melempar `ECONNREFUSED` yang berujung HTTP 500. Selain itu, `getOwnList()` masih mencoba query relasi `patient_profiles` yang tidak ada di Supabase.
+   - *Solusi*: `syncStatuses()` dibungkus dalam `try/catch` resilient, dan `getOwnList()` serta `getOwnById()` dialihkan menggunakan Supabase PostgREST client (`patient_id = userId`) dengan fallback aman. Ditambahkan pula route alias `/appointments/my`.
 

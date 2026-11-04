@@ -78,14 +78,19 @@ const sessionStarted = () => {
 // 2) belum diproses admin saat sesi dimulai → canceled
 function syncStatuses() {
     return __awaiter(this, arguments, void 0, function* (db = prisma_client_config_1.prisma) {
-        yield db.appointments.updateMany({
-            where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },
-            data: { status: 'expired' },
-        });
-        yield db.appointments.updateMany({
-            where: { status: 'waiting_confirmation', practice_sessions: sessionStarted() },
-            data: { status: 'canceled' },
-        });
+        try {
+            yield db.appointments.updateMany({
+                where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },
+                data: { status: 'expired' },
+            });
+            yield db.appointments.updateMany({
+                where: { status: 'waiting_confirmation', practice_sessions: sessionStarted() },
+                data: { status: 'canceled' },
+            });
+        }
+        catch (_a) {
+            // Diamkan agar tidak meledakkan endpoint saat koneksi Prisma lokal tidak aktif
+        }
     });
 }
 // Kunci baris sesi agar perubahan kuota/antrean tidak balapan

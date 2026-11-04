@@ -211,13 +211,38 @@ class AppointmentService {
     static findOwnOrFail(userId, id) {
         return __awaiter(this, void 0, void 0, function* () {
             yield (0, appointment_helpers_1.syncStatuses)();
-            const appointment = yield prisma_client_config_1.prisma.appointments.findFirst({
-                where: { id, patient_profiles: { user_id: userId } },
-                include: appointment_helpers_1.appointmentInclude,
-            });
-            if (!appointment)
-                throw new app_error_1.AppError(404, 'appointment not found');
-            return appointment;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('appointments')
+                    .select(`
+          *,
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(*),
+          ratings(id, rating, review)
+        `)
+                    .eq('id', id)
+                    .eq('patient_id', userId)
+                    .maybeSingle();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const appointment = yield prisma_client_config_1.prisma.appointments.findFirst({
+                    where: { id, patient_profiles: { user_id: userId } },
+                    include: appointment_helpers_1.appointmentInclude,
+                });
+                if (appointment)
+                    return appointment;
+            }
+            catch (_b) {
+                // Continue
+            }
+            throw new app_error_1.AppError(404, 'appointment not found');
         });
     }
     static createAndDescribe(userId, request) {
@@ -230,26 +255,144 @@ class AppointmentService {
         return __awaiter(this, arguments, void 0, function* (userId, { query }) {
             const { page, limit } = query;
             yield (0, appointment_helpers_1.syncStatuses)();
-            const where = { patient_profiles: { user_id: userId } };
-            const [appointments, total] = yield Promise.all([
-                prisma_client_config_1.prisma.appointments.findMany({
-                    where,
-                    include: appointment_helpers_1.appointmentInclude,
-                    orderBy: { created_at: 'desc' },
-                    skip: (page - 1) * limit,
-                    take: limit,
-                }),
-                prisma_client_config_1.prisma.appointments.count({ where }),
-            ]);
-            return {
-                appointments: appointments.map(appointment_helpers_1.describe),
-                meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
-            };
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const from = (page - 1) * limit;
+                const to = from + limit - 1;
+                const { data, count, error } = yield supabase
+                    .from('appointments')
+                    .select(`
+          *,
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(*),
+          ratings(id, rating, review)
+        `, { count: 'exact' })
+                    .eq('patient_id', userId)
+                    .order('created_at', { ascending: false })
+                    .range(from, to);
+                if (!error && data) {
+                    const appointments = data.map((appt) => {
+                        var _a;
+                        const remainingPaymentSec = appt.payment_deadline
+                            ? Math.max(0, Math.floor((new Date(appt.payment_deadline).getTime() - Date.now()) / 1000))
+                            : null;
+                        return {
+                            id: appt.id,
+                            code: appt.code,
+                            status: appt.status,
+                            consultation_fee: appt.consultation_fee,
+                            payment_deadline: appt.payment_deadline,
+                            remaining_payment_time_seconds: remainingPaymentSec,
+                            can_upload_payment_proof: appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+                            can_cancel: appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+                            can_rate: appt.status === 'done' && (!appt.ratings || appt.ratings.length === 0),
+                            qr_token: appt.qr_token,
+                            queue_number: appt.queue_number,
+                            checked_in_at: appt.checked_in_at,
+                            payment_proof_path: appt.payment_proof_path,
+                            rejection_reason: appt.rejection_reason,
+                            created_at: appt.created_at,
+                            doctor: appt.doctors
+                                ? {
+                                    id: appt.doctors.id,
+                                    full_name: appt.doctors.full_name,
+                                    photo: appt.doctors.photo_url,
+                                    photo_url: appt.doctors.photo_url,
+                                    specialist: ((_a = appt.doctors.specialists) === null || _a === void 0 ? void 0 : _a.name) || 'Dokter Estetika',
+                                }
+                                : null,
+                            practice_session: appt.practice_sessions
+                                ? {
+                                    id: appt.practice_sessions.id,
+                                    session_date: appt.practice_sessions.session_date,
+                                    start_time: appt.practice_sessions.start_time,
+                                    end_time: appt.practice_sessions.end_time,
+                                    current_queue_number: appt.practice_sessions.current_queue_number,
+                                }
+                                : null,
+                        };
+                    });
+                    const total = count !== null && count !== void 0 ? count : appointments.length;
+                    return {
+                        appointments,
+                        meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+                    };
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
+            try {
+                const where = { patient_profiles: { user_id: userId } };
+                const [appointments, total] = yield Promise.all([
+                    prisma_client_config_1.prisma.appointments.findMany({
+                        where,
+                        include: appointment_helpers_1.appointmentInclude,
+                        orderBy: { created_at: 'desc' },
+                        skip: (page - 1) * limit,
+                        take: limit,
+                    }),
+                    prisma_client_config_1.prisma.appointments.count({ where }),
+                ]);
+                return {
+                    appointments: appointments.map(appointment_helpers_1.describe),
+                    meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+                };
+            }
+            catch (_c) {
+                return {
+                    appointments: [],
+                    meta: { page, limit, total: 0, total_pages: 0 },
+                };
+            }
         });
     }
     static getOwnById(userId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (userId, { params }) {
-            return (0, appointment_helpers_1.describe)(yield this.findOwnOrFail(userId, params.id));
+            var _b;
+            const raw = yield this.findOwnOrFail(userId, params.id);
+            if (raw.patient_id) {
+                const appt = raw;
+                const remainingPaymentSec = appt.payment_deadline
+                    ? Math.max(0, Math.floor((new Date(appt.payment_deadline).getTime() - Date.now()) / 1000))
+                    : null;
+                return {
+                    id: appt.id,
+                    code: appt.code,
+                    status: appt.status,
+                    consultation_fee: appt.consultation_fee,
+                    payment_deadline: appt.payment_deadline,
+                    remaining_payment_time_seconds: remainingPaymentSec,
+                    can_upload_payment_proof: appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+                    can_cancel: appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+                    can_rate: appt.status === 'done' && (!appt.ratings || appt.ratings.length === 0),
+                    qr_token: appt.qr_token,
+                    queue_number: appt.queue_number,
+                    checked_in_at: appt.checked_in_at,
+                    payment_proof_path: appt.payment_proof_path,
+                    rejection_reason: appt.rejection_reason,
+                    created_at: appt.created_at,
+                    doctor: appt.doctors
+                        ? {
+                            id: appt.doctors.id,
+                            full_name: appt.doctors.full_name,
+                            photo: appt.doctors.photo_url,
+                            photo_url: appt.doctors.photo_url,
+                            specialist: ((_b = appt.doctors.specialists) === null || _b === void 0 ? void 0 : _b.name) || 'Dokter Estetika',
+                        }
+                        : null,
+                    practice_session: appt.practice_sessions
+                        ? {
+                            id: appt.practice_sessions.id,
+                            session_date: appt.practice_sessions.session_date,
+                            start_time: appt.practice_sessions.start_time,
+                            end_time: appt.practice_sessions.end_time,
+                            current_queue_number: appt.practice_sessions.current_queue_number,
+                        }
+                        : null,
+                };
+            }
+            return (0, appointment_helpers_1.describe)(raw);
         });
     }
     static uploadPaymentProof(userId_1, _a, file_1, imageBase64_1) {

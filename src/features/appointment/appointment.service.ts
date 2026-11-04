@@ -237,13 +237,40 @@ export class AppointmentService {
   private static async findOwnOrFail(userId: string, id: string) {
     await syncStatuses();
 
-    const appointment = await prisma.appointments.findFirst({
-      where: { id, patient_profiles: { user_id: userId } },
-      include: appointmentInclude,
-    });
-    if (!appointment) throw new AppError(404, 'appointment not found');
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(
+          `
+          *,
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(*),
+          ratings(id, rating, review)
+        `,
+        )
+        .eq('id', id)
+        .eq('patient_id', userId)
+        .maybeSingle();
 
-    return appointment;
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
+    try {
+      const appointment = await prisma.appointments.findFirst({
+        where: { id, patient_profiles: { user_id: userId } },
+        include: appointmentInclude,
+      });
+      if (appointment) return appointment;
+    } catch {
+      // Continue
+    }
+
+    throw new AppError(404, 'appointment not found');
   }
 
   static async createAndDescribe(userId: string, request: createAppointmentRequest) {
@@ -255,27 +282,162 @@ export class AppointmentService {
     const { page, limit } = query;
     await syncStatuses();
 
-    const where: Prisma.appointmentsWhereInput = { patient_profiles: { user_id: userId } };
+    try {
+      const supabase = getSupabaseClient();
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
 
-    const [appointments, total] = await Promise.all([
-      prisma.appointments.findMany({
-        where,
-        include: appointmentInclude,
-        orderBy: { created_at: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.appointments.count({ where }),
-    ]);
+      const { data, count, error } = await supabase
+        .from('appointments')
+        .select(
+          `
+          *,
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(*),
+          ratings(id, rating, review)
+        `,
+          { count: 'exact' },
+        )
+        .eq('patient_id', userId)
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
-    return {
-      appointments: appointments.map(describe),
-      meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
-    };
+      if (!error && data) {
+        const appointments = data.map((appt: any) => {
+          const remainingPaymentSec = appt.payment_deadline
+            ? Math.max(
+                0,
+                Math.floor(
+                  (new Date(appt.payment_deadline).getTime() - Date.now()) / 1000,
+                ),
+              )
+            : null;
+
+          return {
+            id: appt.id,
+            code: appt.code,
+            status: appt.status,
+            consultation_fee: appt.consultation_fee,
+            payment_deadline: appt.payment_deadline,
+            remaining_payment_time_seconds: remainingPaymentSec,
+            can_upload_payment_proof:
+              appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+            can_cancel:
+              appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+            can_rate:
+              appt.status === 'done' && (!appt.ratings || appt.ratings.length === 0),
+            qr_token: appt.qr_token,
+            queue_number: appt.queue_number,
+            checked_in_at: appt.checked_in_at,
+            payment_proof_path: appt.payment_proof_path,
+            rejection_reason: appt.rejection_reason,
+            created_at: appt.created_at,
+            doctor: appt.doctors
+              ? {
+                  id: appt.doctors.id,
+                  full_name: appt.doctors.full_name,
+                  photo: appt.doctors.photo_url,
+                  photo_url: appt.doctors.photo_url,
+                  specialist: appt.doctors.specialists?.name || 'Dokter Estetika',
+                }
+              : null,
+            practice_session: appt.practice_sessions
+              ? {
+                  id: appt.practice_sessions.id,
+                  session_date: appt.practice_sessions.session_date,
+                  start_time: appt.practice_sessions.start_time,
+                  end_time: appt.practice_sessions.end_time,
+                  current_queue_number: appt.practice_sessions.current_queue_number,
+                }
+              : null,
+          };
+        });
+
+        const total = count ?? appointments.length;
+
+        return {
+          appointments,
+          meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
+    try {
+      const where: Prisma.appointmentsWhereInput = { patient_profiles: { user_id: userId } };
+
+      const [appointments, total] = await Promise.all([
+        prisma.appointments.findMany({
+          where,
+          include: appointmentInclude,
+          orderBy: { created_at: 'desc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.appointments.count({ where }),
+      ]);
+
+      return {
+        appointments: appointments.map(describe),
+        meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+      };
+    } catch {
+      return {
+        appointments: [],
+        meta: { page, limit, total: 0, total_pages: 0 },
+      };
+    }
   }
 
   static async getOwnById(userId: string, { params }: appointmentIdRequest) {
-    return describe(await this.findOwnOrFail(userId, params.id));
+    const raw = await this.findOwnOrFail(userId, params.id);
+    if ((raw as any).patient_id) {
+      const appt = raw as any;
+      const remainingPaymentSec = appt.payment_deadline
+        ? Math.max(0, Math.floor((new Date(appt.payment_deadline).getTime() - Date.now()) / 1000))
+        : null;
+
+      return {
+        id: appt.id,
+        code: appt.code,
+        status: appt.status,
+        consultation_fee: appt.consultation_fee,
+        payment_deadline: appt.payment_deadline,
+        remaining_payment_time_seconds: remainingPaymentSec,
+        can_upload_payment_proof:
+          appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+        can_cancel:
+          appt.status === 'pending_payment' || appt.status === 'waiting_payment',
+        can_rate:
+          appt.status === 'done' && (!appt.ratings || appt.ratings.length === 0),
+        qr_token: appt.qr_token,
+        queue_number: appt.queue_number,
+        checked_in_at: appt.checked_in_at,
+        payment_proof_path: appt.payment_proof_path,
+        rejection_reason: appt.rejection_reason,
+        created_at: appt.created_at,
+        doctor: appt.doctors
+          ? {
+              id: appt.doctors.id,
+              full_name: appt.doctors.full_name,
+              photo: appt.doctors.photo_url,
+              photo_url: appt.doctors.photo_url,
+              specialist: appt.doctors.specialists?.name || 'Dokter Estetika',
+            }
+          : null,
+        practice_session: appt.practice_sessions
+          ? {
+              id: appt.practice_sessions.id,
+              session_date: appt.practice_sessions.session_date,
+              start_time: appt.practice_sessions.start_time,
+              end_time: appt.practice_sessions.end_time,
+              current_queue_number: appt.practice_sessions.current_queue_number,
+            }
+          : null,
+      };
+    }
+    return describe(raw as any);
   }
 
   static async uploadPaymentProof(
