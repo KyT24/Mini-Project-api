@@ -8,6 +8,7 @@
     "build": "prisma generate && tsc",
     "start": "node dist/src/server.js",
     "postinstall": "prisma generate",
+    "db:init": "tsx src/scripts/db-init.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "seed:treatments": "tsx src/scripts/seed-treatments.ts"
   },

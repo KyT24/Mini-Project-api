@@ -62,11 +62,27 @@ class DashboardService {
                     .from('appointments')
                     .select('*', { count: 'exact', head: true })
                     .eq('status', 'waiting_confirmation');
+                // Seluruh janji temu berstatus done (semua waktu) untuk metrik total pendapatan & terkonfirmasi
+                const { data: allDone } = yield supabase
+                    .from('appointments')
+                    .select('consultation_fee')
+                    .eq('status', 'done');
+                const doneCount = (allDone === null || allDone === void 0 ? void 0 : allDone.length) || 0;
+                const totalRevenue = (allDone || []).reduce((sum, a) => sum + Number(a.consultation_fee || 0), 0);
                 return {
                     today_appointments: todayAppointments,
                     waiting_queue: waitingQueue,
                     pending_verification: pendingCount || 0,
                     today_revenue: todayRevenue,
+                    total_revenue: totalRevenue,
+                    done_count: doneCount,
+                    // Aliases format camelCase untuk kompatibilitas frontend
+                    todayCount: todayAppointments,
+                    pendingCount: pendingCount || 0,
+                    doneCount: doneCount,
+                    todayRevenue: todayRevenue,
+                    totalRevenue: totalRevenue,
+                    waitingQueue: waitingQueue,
                 };
             }
             catch (_c) {
@@ -115,6 +131,14 @@ class DashboardService {
                 waiting_queue: waitingQueue,
                 pending_verification: pendingVerification,
                 today_revenue: todayRevenue,
+                total_revenue: todayRevenue,
+                done_count: todayDoneAppointments.length,
+                todayCount: todayAppointments,
+                pendingCount: pendingVerification,
+                doneCount: todayDoneAppointments.length,
+                todayRevenue: todayRevenue,
+                totalRevenue: todayRevenue,
+                waitingQueue: waitingQueue,
             };
         });
     }
