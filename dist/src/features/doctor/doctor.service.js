@@ -24,19 +24,9 @@ exports.DoctorService = void 0;
 const crypto_1 = require("crypto");
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
-const bcrypt_lib_1 = require("../../lib/bcrypt.lib");
 const supabase_lib_1 = require("../../lib/supabase.lib");
 const appointment_constants_1 = require("../appointment/appointment.constants");
 const doctorInclude = {
-    users: {
-        select: {
-            id: true,
-            email: true,
-            full_name: true,
-            phone_number: true,
-            profile_picture: true,
-        },
-    },
     specialists: { select: { id: true, name: true } },
     // Jadwal aktif untuk kartu & profil dokter
     doctor_schedules: {
@@ -82,29 +72,39 @@ class DoctorService {
     }
     static create(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
-            const { email, phone_number, password, specialist_id } = body, doctor = __rest(body, ["email", "phone_number", "password", "specialist_id"]);
-            const findUserByEmail = yield prisma_client_config_1.prisma.user.findUnique({ where: { email } });
-            if (findUserByEmail)
-                throw new app_error_1.AppError(409, 'email already registered');
-            const findUserByPhone = yield prisma_client_config_1.prisma.user.findUnique({
-                where: { phone_number },
-            });
-            if (findUserByPhone) {
-                throw new app_error_1.AppError(409, 'phone number already registered');
+            var _b, _c;
+            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .insert({
+                    full_name: doctor.full_name,
+                    bio: doctor.bio,
+                    experience_years: doctor.experience_years,
+                    consultation_fee: doctor.consultation_fee,
+                    photo_url: doctor.photo || doctor.photo_url || null,
+                    specialist_id: specialist_id || null,
+                    is_active: (_b = doctor.is_active) !== null && _b !== void 0 ? _b : true,
+                })
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_d) {
+                // Prisma fallback
             }
             yield this.assertSpecialistExists(specialist_id);
-            const hashedPassword = yield bcrypt_lib_1.Bcrypt.hashPassword(password);
-            // Nested create: user + doctor dibuat dalam satu transaksi,
-            // bila salah satu gagal keduanya batal
-            const data = Object.assign(Object.assign({}, doctor), { users: {
-                    create: {
-                        email,
-                        phone_number,
-                        full_name: doctor.full_name,
-                        password: hashedPassword,
-                        role: 'DOCTOR',
-                    },
-                } });
+            const data = {
+                full_name: doctor.full_name,
+                bio: doctor.bio,
+                experience_years: doctor.experience_years,
+                consultation_fee: doctor.consultation_fee,
+                photo_url: doctor.photo || doctor.photo_url || null,
+                is_active: (_c = doctor.is_active) !== null && _c !== void 0 ? _c : true,
+            };
             // Spesialis opsional: hanya dihubungkan jika dipilih
             if (specialist_id) {
                 data.specialists = { connect: { id: specialist_id } };
@@ -327,7 +327,7 @@ class DoctorService {
                             rating: true,
                             review: true,
                             created_at: true,
-                            patient_profiles: { select: { users: { select: { full_name: true } } } },
+                            profiles: { select: { full_name: true } },
                         },
                     }),
                 ]);
@@ -337,16 +337,55 @@ class DoctorService {
                 if (avg !== null) {
                     ratingAvg = Number(avg.toFixed(1));
                 }
-                return Object.assign(Object.assign({}, doctor), { rating_avg: ratingAvg, rating_count: summary._count.rating, reviews });
+                return Object.assign(Object.assign({}, doctor), { rating_avg: ratingAvg, rating_count: summary._count.rating, reviews: reviews.map((r) => {
+                        var _a, _b;
+                        return ({
+                            id: r.id,
+                            rating: r.rating,
+                            review: r.review,
+                            created_at: r.created_at,
+                            patient_profiles: { users: { full_name: (_b = (_a = r.profiles) === null || _a === void 0 ? void 0 : _a.full_name) !== null && _b !== void 0 ? _b : 'Pasien' } },
+                        });
+                    }) });
             }
         });
     }
     static update(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params, body }) {
+            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const updateData = { updated_at: new Date().toISOString() };
+                if (doctor.full_name !== undefined)
+                    updateData.full_name = doctor.full_name;
+                if (doctor.bio !== undefined)
+                    updateData.bio = doctor.bio;
+                if (doctor.experience_years !== undefined)
+                    updateData.experience_years = doctor.experience_years;
+                if (doctor.consultation_fee !== undefined)
+                    updateData.consultation_fee = doctor.consultation_fee;
+                if (doctor.photo || doctor.photo_url)
+                    updateData.photo_url = doctor.photo || doctor.photo_url;
+                if (doctor.is_active !== undefined)
+                    updateData.is_active = doctor.is_active;
+                if (specialist_id !== undefined)
+                    updateData.specialist_id = specialist_id;
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .update(updateData)
+                    .eq('id', params.id)
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             yield this.assertSpecialistExists(body.specialist_id);
-            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
-            const data = Object.assign({}, doctor);
+            const data = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (doctor.full_name ? { full_name: doctor.full_name } : {})), (doctor.bio !== undefined ? { bio: doctor.bio } : {})), (doctor.experience_years !== undefined ? { experience_years: doctor.experience_years } : {})), (doctor.consultation_fee !== undefined ? { consultation_fee: doctor.consultation_fee } : {})), ((doctor.photo || doctor.photo_url) ? { photo_url: doctor.photo || doctor.photo_url } : {})), (doctor.is_active !== undefined ? { is_active: doctor.is_active } : {}));
             // Spesialis: id = hubungkan, null = lepaskan, undefined = tidak diubah
             if (specialist_id !== undefined) {
                 if (specialist_id) {
@@ -355,10 +394,6 @@ class DoctorService {
                 else {
                     data.specialists = { disconnect: true };
                 }
-            }
-            // Nama di akun user ikut diperbarui agar tetap sama
-            if (body.full_name) {
-                data.users = { update: { full_name: body.full_name } };
             }
             return yield prisma_client_config_1.prisma.doctors.update({
                 where: { id: params.id },
@@ -369,6 +404,21 @@ class DoctorService {
     }
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .delete()
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             const [appointments, sessions, ratings] = yield Promise.all([
                 prisma_client_config_1.prisma.appointments.count({ where: { doctor_id: params.id } }),

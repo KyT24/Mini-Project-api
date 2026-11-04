@@ -1,7 +1,8 @@
-import { randomBytes } from 'crypto';
+import { randomUUID } from 'crypto';
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import {
   appointmentIdRequest,
   getAdminAppointmentsRequest,
@@ -18,10 +19,13 @@ import {
 // Admin tidak perlu qr_token; data pasien ditambahkan untuk verifikasi
 const adminInclude = {
   ...appointmentInclude,
-  patient_profiles: {
+  profiles: {
     select: {
       id: true,
-      users: { select: { full_name: true, email: true, phone_number: true } },
+      full_name: true,
+      phone_number: true,
+      role: true,
+      avatar_url: true,
     },
   },
 } satisfies Prisma.appointmentsInclude;
@@ -44,6 +48,57 @@ export class AppointmentAdminService {
     const { status, page, limit } = query;
     await syncStatuses();
 
+    try {
+      const supabase = getSupabaseClient();
+      let q = supabase
+        .from('appointments')
+        .select(
+          `
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `,
+          { count: 'exact' },
+        );
+
+      if (status) {
+        q = q.eq('status', status);
+      }
+      if (status === 'waiting_confirmation') {
+        q = q.order('updated_at', { ascending: true });
+      } else {
+        q = q.order('created_at', { ascending: false });
+      }
+
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      const { data, count, error } = await q.range(from, to);
+
+      if (!error && data) {
+        const appointments = data.map((appt: any) => ({
+          ...appt,
+          patient_profiles: {
+            id: appt.patient_id,
+            users: {
+              full_name: appt.profiles?.full_name || 'Pasien',
+              email: '',
+              phone_number: appt.profiles?.phone_number || null,
+            },
+          },
+        }));
+
+        const total = count || appointments.length;
+        return {
+          appointments,
+          meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     // Filter status hanya dipakai jika dikirim dari query
     const where: Prisma.appointmentsWhereInput = {};
     if (status) {
@@ -65,20 +120,141 @@ export class AppointmentAdminService {
       prisma.appointments.count({ where }),
     ]);
 
+    const mapped = appointments.map((appt: any) => ({
+      ...appt,
+      patient_profiles: {
+        id: appt.patient_id,
+        users: {
+          full_name: appt.profiles?.full_name || 'Pasien',
+          email: '',
+          phone_number: appt.profiles?.phone_number || null,
+        },
+      },
+    }));
+
     return {
-      appointments,
-      meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+      appointments: mapped,
+      meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
     };
   }
 
   static async getById({ params }: appointmentIdRequest) {
     await syncStatuses();
-    return this.findOrFail(params.id);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(
+          `
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `,
+        )
+        .eq('id', params.id)
+        .single();
+
+      if (!error && data) {
+        return {
+          ...data,
+          patient_profiles: {
+            id: data.patient_id,
+            users: {
+              full_name: data.profiles?.full_name || 'Pasien',
+              email: '',
+              phone_number: data.profiles?.phone_number || null,
+            },
+          },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
+    const appt: any = await this.findOrFail(params.id);
+    return {
+      ...appt,
+      patient_profiles: {
+        id: appt.patient_id,
+        users: {
+          full_name: appt.profiles?.full_name || 'Pasien',
+          email: '',
+          phone_number: appt.profiles?.phone_number || null,
+        },
+      },
+    };
   }
 
   // Approve: beri nomor antrean berikutnya di sesi + token QR unik
   static async approve(adminId: string, { params }: appointmentIdRequest) {
     await syncStatuses();
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: appt } = await supabase
+        .from('appointments')
+        .select('*')
+        .eq('id', params.id)
+        .single();
+
+      if (appt) {
+        if (appt.status !== 'waiting_confirmation') {
+          throw new AppError(409, `Appointment is ${appt.status}, cannot be approved`);
+        }
+
+        const { data: maxQ } = await supabase
+          .from('appointments')
+          .select('queue_number')
+          .eq('session_id', appt.session_id)
+          .order('queue_number', { ascending: false })
+          .limit(1);
+
+        const nextQueueNumber = ((maxQ && maxQ[0]?.queue_number) || 0) + 1;
+        const qrToken = randomUUID();
+
+        const { data: updated, error } = await supabase
+          .from('appointments')
+          .update({
+            status: 'done',
+            confirmed_at: new Date().toISOString(),
+            queue_number: nextQueueNumber,
+            qr_token: qrToken,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', params.id)
+          .select(
+            `
+            *,
+            profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+            doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+            practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+            ratings(id, rating, review)
+          `,
+          )
+          .single();
+
+        if (!error && updated) {
+          return {
+            ...updated,
+            patient_profiles: {
+              id: updated.patient_id,
+              users: {
+                full_name: updated.profiles?.full_name || 'Pasien',
+                email: '',
+                phone_number: updated.profiles?.phone_number || null,
+              },
+            },
+          };
+        }
+      }
+    } catch (e: any) {
+      if (e instanceof AppError) throw e;
+      // Fallback to Prisma transaction
+    }
+
     const { session_id } = await this.findOrFail(params.id);
 
     return await prisma.$transaction(async (tx) => {
@@ -97,10 +273,6 @@ export class AppointmentAdminService {
         _max: { queue_number: true },
       });
 
-      await tx.payment_proofs.updateMany({
-        where: { appointment_id: appointment.id, verification_status: 'pending' },
-        data: { verification_status: 'approved', verified_by: adminId, verified_at: new Date() },
-      });
       // Nomor antrean = nomor terbesar saat ini + 1 (mulai dari 1 jika belum ada)
       const lastQueueNumber = _max.queue_number ?? 0;
       const nextQueueNumber = lastQueueNumber + 1;
@@ -111,17 +283,68 @@ export class AppointmentAdminService {
           status: 'done',
           confirmed_at: new Date(),
           queue_number: nextQueueNumber,
-          qr_token: randomBytes(32).toString('hex'),
+          qr_token: randomUUID(),
         },
       });
 
-      return this.findOrFail(appointment.id, tx);
+      const updated: any = await this.findOrFail(appointment.id, tx);
+      return {
+        ...updated,
+        patient_profiles: {
+          id: updated.patient_id,
+          users: {
+            full_name: updated.profiles?.full_name || 'Pasien',
+            email: '',
+            phone_number: updated.profiles?.phone_number || null,
+          },
+        },
+      };
     });
   }
 
   // Reject: kuota otomatis kembali karena rejected tidak dihitung holdsQuota
   static async reject(adminId: string, { params, body }: rejectAppointmentRequest) {
     await syncStatuses();
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: updated, error } = await supabase
+        .from('appointments')
+        .update({
+          status: 'rejected',
+          rejection_reason: body.reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', params.id)
+        .eq('status', 'waiting_confirmation')
+        .select(
+          `
+          *,
+          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
+          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
+          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
+          ratings(id, rating, review)
+        `,
+        )
+        .single();
+
+      if (!error && updated) {
+        return {
+          ...updated,
+          patient_profiles: {
+            id: updated.patient_id,
+            users: {
+              full_name: updated.profiles?.full_name || 'Pasien',
+              email: '',
+              phone_number: updated.profiles?.phone_number || null,
+            },
+          },
+        };
+      }
+    } catch (e: any) {
+      if (e instanceof AppError) throw e;
+      // Prisma fallback
+    }
 
     return await prisma.$transaction(async (tx) => {
       const updated = await tx.appointments.updateMany({
@@ -136,17 +359,18 @@ export class AppointmentAdminService {
         throw new AppError(409, `Appointment is ${appointment.status}, cannot be rejected`);
       }
 
-      await tx.payment_proofs.updateMany({
-        where: { appointment_id: params.id, verification_status: 'pending' },
-        data: {
-          verification_status: 'rejected',
-          rejection_reason: body.reason,
-          verified_by: adminId,
-          verified_at: new Date(),
+      const res: any = await this.findOrFail(params.id, tx);
+      return {
+        ...res,
+        patient_profiles: {
+          id: res.patient_id,
+          users: {
+            full_name: res.profiles?.full_name || 'Pasien',
+            email: '',
+            phone_number: res.profiles?.phone_number || null,
+          },
         },
-      });
-
-      return this.findOrFail(params.id, tx);
+      };
     });
   }
 }

@@ -13,15 +13,6 @@ import { Prisma } from '../../generated/prisma/client';
 import { LATEST_REVIEWS_LIMIT } from '../appointment/appointment.constants';
 
 const doctorInclude = {
-  users: {
-    select: {
-      id: true,
-      email: true,
-      full_name: true,
-      phone_number: true,
-      profile_picture: true,
-    },
-  },
   specialists: { select: { id: true, name: true } },
   // Jadwal aktif untuk kartu & profil dokter
   doctor_schedules: {
@@ -65,35 +56,40 @@ export class DoctorService {
   }
 
   static async create({ body }: createDoctorRequest) {
-    const { email, phone_number, password, specialist_id, ...doctor } = body;
+    const { specialist_id, ...doctor } = body;
 
-    const findUserByEmail = await prisma.user.findUnique({ where: { email } });
-    if (findUserByEmail) throw new AppError(409, 'email already registered');
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('doctors')
+        .insert({
+          full_name: doctor.full_name,
+          bio: doctor.bio,
+          experience_years: doctor.experience_years,
+          consultation_fee: doctor.consultation_fee,
+          photo_url: doctor.photo || (doctor as any).photo_url || null,
+          specialist_id: specialist_id || null,
+          is_active: doctor.is_active ?? true,
+        })
+        .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+        .single();
 
-    const findUserByPhone = await prisma.user.findUnique({
-      where: { phone_number },
-    });
-    if (findUserByPhone) {
-      throw new AppError(409, 'phone number already registered');
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
     }
 
     await this.assertSpecialistExists(specialist_id);
 
-    const hashedPassword = await Bcrypt.hashPassword(password);
-
-    // Nested create: user + doctor dibuat dalam satu transaksi,
-    // bila salah satu gagal keduanya batal
     const data: Prisma.doctorsCreateInput = {
-      ...doctor,
-      users: {
-        create: {
-          email,
-          phone_number,
-          full_name: doctor.full_name,
-          password: hashedPassword,
-          role: 'DOCTOR',
-        },
-      },
+      full_name: doctor.full_name,
+      bio: doctor.bio,
+      experience_years: doctor.experience_years,
+      consultation_fee: doctor.consultation_fee,
+      photo_url: doctor.photo || (doctor as any).photo_url || null,
+      is_active: doctor.is_active ?? true,
     };
 
     // Spesialis opsional: hanya dihubungkan jika dipilih
@@ -345,7 +341,7 @@ export class DoctorService {
             rating: true,
             review: true,
             created_at: true,
-            patient_profiles: { select: { users: { select: { full_name: true } } } },
+            profiles: { select: { full_name: true } },
           },
         }),
       ]);
@@ -361,18 +357,56 @@ export class DoctorService {
         ...doctor,
         rating_avg: ratingAvg,
         rating_count: summary._count.rating,
-        reviews,
+        reviews: reviews.map((r: any) => ({
+          id: r.id,
+          rating: r.rating,
+          review: r.review,
+          created_at: r.created_at,
+          patient_profiles: { users: { full_name: r.profiles?.full_name ?? 'Pasien' } },
+        })),
       };
     }
   }
 
   static async update({ params, body }: updateDoctorRequest) {
+    const { specialist_id, ...doctor } = body;
+
+    try {
+      const supabase = getSupabaseClient();
+      const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (doctor.full_name !== undefined) updateData.full_name = doctor.full_name;
+      if (doctor.bio !== undefined) updateData.bio = doctor.bio;
+      if (doctor.experience_years !== undefined) updateData.experience_years = doctor.experience_years;
+      if (doctor.consultation_fee !== undefined) updateData.consultation_fee = doctor.consultation_fee;
+      if (doctor.photo || (doctor as any).photo_url) updateData.photo_url = doctor.photo || (doctor as any).photo_url;
+      if (doctor.is_active !== undefined) updateData.is_active = doctor.is_active;
+      if (specialist_id !== undefined) updateData.specialist_id = specialist_id;
+
+      const { data, error } = await supabase
+        .from('doctors')
+        .update(updateData)
+        .eq('id', params.id)
+        .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.findOrFail(params.id);
     await this.assertSpecialistExists(body.specialist_id);
 
-    const { specialist_id, ...doctor } = body;
-
-    const data: Prisma.doctorsUpdateInput = { ...doctor };
+    const data: Prisma.doctorsUpdateInput = {
+      ...(doctor.full_name ? { full_name: doctor.full_name } : {}),
+      ...(doctor.bio !== undefined ? { bio: doctor.bio } : {}),
+      ...(doctor.experience_years !== undefined ? { experience_years: doctor.experience_years } : {}),
+      ...(doctor.consultation_fee !== undefined ? { consultation_fee: doctor.consultation_fee } : {}),
+      ...((doctor.photo || (doctor as any).photo_url) ? { photo_url: doctor.photo || (doctor as any).photo_url } : {}),
+      ...(doctor.is_active !== undefined ? { is_active: doctor.is_active } : {}),
+    };
 
     // Spesialis: id = hubungkan, null = lepaskan, undefined = tidak diubah
     if (specialist_id !== undefined) {
@@ -383,11 +417,6 @@ export class DoctorService {
       }
     }
 
-    // Nama di akun user ikut diperbarui agar tetap sama
-    if (body.full_name) {
-      data.users = { update: { full_name: body.full_name } };
-    }
-
     return await prisma.doctors.update({
       where: { id: params.id },
       data,
@@ -396,6 +425,22 @@ export class DoctorService {
   }
 
   static async delete({ params }: doctorIdRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('doctors')
+        .delete()
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.findOrFail(params.id);
 
     const [appointments, sessions, ratings] = await Promise.all([

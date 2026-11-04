@@ -14,23 +14,13 @@ exports.syncStatuses = syncStatuses;
 exports.shiftQueueUp = shiftQueueUp;
 exports.describe = describe;
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
+const supabase_lib_1 = require("../../lib/supabase.lib");
 const time_lib_1 = require("../../lib/time.lib");
 const appointment_constants_1 = require("./appointment.constants");
 exports.appointmentInclude = {
-    doctors: { select: { id: true, full_name: true, photo: true } },
-    treatments: { select: { id: true, slug: true, name: true } },
+    doctors: { select: { id: true, full_name: true, photo_url: true } },
     practice_sessions: {
-        select: { id: true, session_date: true, start_time: true, end_time: true },
-    },
-    payment_proofs: {
-        select: {
-            id: true,
-            image_url: true,
-            uploaded_at: true,
-            verification_status: true,
-            rejection_reason: true,
-        },
-        orderBy: { uploaded_at: 'desc' },
+        select: { id: true, session_date: true, start_time: true, end_time: true, current_queue_number: true },
     },
     ratings: { select: { id: true, rating: true, review: true, created_at: true } },
 };
@@ -79,6 +69,13 @@ const sessionStarted = () => {
 function syncStatuses() {
     return __awaiter(this, arguments, void 0, function* (db = prisma_client_config_1.prisma) {
         try {
+            const supabase = (0, supabase_lib_1.getSupabaseClient)();
+            yield supabase.rpc('process_expired_appointments');
+        }
+        catch (_a) {
+            // Continue
+        }
+        try {
             yield db.appointments.updateMany({
                 where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },
                 data: { status: 'expired' },
@@ -88,7 +85,7 @@ function syncStatuses() {
                 data: { status: 'canceled' },
             });
         }
-        catch (_a) {
+        catch (_b) {
             // Diamkan agar tidak meledakkan endpoint saat koneksi Prisma lokal tidak aktif
         }
     });

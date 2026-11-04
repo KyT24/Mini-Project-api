@@ -9,12 +9,15 @@
 * 🟢 You can import this file directly.
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verification_status = exports.session_status = exports.membership_status = exports.gender_type = exports.checkin_status = exports.transaction_status = exports.role = void 0;
-exports.role = {
-    PATIENT: 'PATIENT',
-    ADMIN: 'ADMIN',
-    STAFF: 'STAFF',
-    DOCTOR: 'DOCTOR'
+exports.role = exports.checkin_status = exports.transaction_status = exports.gender = exports.user_role = void 0;
+exports.user_role = {
+    patient: 'patient',
+    admin: 'admin'
+};
+exports.gender = {
+    male: 'male',
+    female: 'female',
+    other: 'other'
 };
 exports.transaction_status = {
     waiting_payment: 'waiting_payment',
@@ -28,25 +31,9 @@ exports.checkin_status = {
     checked_in: 'checked_in',
     no_show: 'no_show'
 };
-exports.gender_type = {
-    male: 'male',
-    female: 'female',
-    other: 'other'
-};
-exports.membership_status = {
-    pending: 'pending',
-    active: 'active',
-    expired: 'expired',
-    canceled: 'canceled'
-};
-exports.session_status = {
-    scheduled: 'scheduled',
-    ongoing: 'ongoing',
-    completed: 'completed',
-    canceled: 'canceled'
-};
-exports.verification_status = {
-    pending: 'pending',
-    approved: 'approved',
-    rejected: 'rejected'
+exports.role = {
+    PATIENT: 'PATIENT',
+    ADMIN: 'ADMIN',
+    STAFF: 'STAFF',
+    DOCTOR: 'DOCTOR'
 };

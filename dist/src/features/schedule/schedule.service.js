@@ -107,7 +107,39 @@ class ScheduleService {
     }
     static create(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
+            var _b;
             const { doctor_id, day_of_week, start_time, end_time } = body, schedule = __rest(body, ["doctor_id", "day_of_week", "start_time", "end_time"]);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .insert({
+                    doctor_id,
+                    day_of_week,
+                    start_time: `${start_time}:00`,
+                    end_time: `${end_time}:00`,
+                    patient_quota: schedule.patient_quota,
+                    is_active: (_b = schedule.is_active) !== null && _b !== void 0 ? _b : true,
+                })
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+            }
+            catch (_c) {
+                // Prisma fallback
+            }
             yield this.assertDoctorExists(doctor_id);
             yield this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
             return yield prisma_client_config_1.prisma.doctor_schedules.create({
@@ -120,6 +152,42 @@ class ScheduleService {
     static update(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params, body }) {
             var _b, _c, _d;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const updateData = { updated_at: new Date().toISOString() };
+                if (body.day_of_week !== undefined)
+                    updateData.day_of_week = body.day_of_week;
+                if (body.start_time !== undefined)
+                    updateData.start_time = `${body.start_time}:00`;
+                if (body.end_time !== undefined)
+                    updateData.end_time = `${body.end_time}:00`;
+                if (body.patient_quota !== undefined)
+                    updateData.patient_quota = body.patient_quota;
+                if (body.is_active !== undefined)
+                    updateData.is_active = body.is_active;
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .update(updateData)
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+            }
+            catch (_e) {
+                // Prisma fallback
+            }
             const current = yield this.findOrFail(params.id);
             const day = (_b = body.day_of_week) !== null && _b !== void 0 ? _b : current.day_of_week;
             const start = (_c = body.start_time) !== null && _c !== void 0 ? _c : (0, time_lib_1.fromDbTime)(current.start_time);
@@ -144,6 +212,21 @@ class ScheduleService {
     }
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .delete()
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             return yield prisma_client_config_1.prisma.doctor_schedules.delete({ where: { id: params.id } });
         });

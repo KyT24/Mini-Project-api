@@ -1,25 +1,15 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { Prisma } from '../../generated/prisma/client';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import { fromDbTime, toDbDate, toDbTime } from '../../lib/time.lib';
 import { CLINIC_UTC_OFFSET } from './appointment.constants';
 
 export type Tx = Prisma.TransactionClient;
 
 export const appointmentInclude = {
-  doctors: { select: { id: true, full_name: true, photo: true } },
-  treatments: { select: { id: true, slug: true, name: true } },
+  doctors: { select: { id: true, full_name: true, photo_url: true } },
   practice_sessions: {
-    select: { id: true, session_date: true, start_time: true, end_time: true },
-  },
-  payment_proofs: {
-    select: {
-      id: true,
-      image_url: true,
-      uploaded_at: true,
-      verification_status: true,
-      rejection_reason: true,
-    },
-    orderBy: { uploaded_at: 'desc' },
+    select: { id: true, session_date: true, start_time: true, end_time: true, current_queue_number: true },
   },
   ratings: { select: { id: true, rating: true, review: true, created_at: true } },
 } satisfies Prisma.appointmentsInclude;
@@ -74,6 +64,13 @@ const sessionStarted = (): Prisma.practice_sessionsWhereInput => {
 // 1) belum upload bukti sampai batas waktu → expired
 // 2) belum diproses admin saat sesi dimulai → canceled
 export async function syncStatuses(db: Tx | typeof prisma = prisma) {
+  try {
+    const supabase = getSupabaseClient();
+    await supabase.rpc('process_expired_appointments');
+  } catch {
+    // Continue
+  }
+
   try {
     await db.appointments.updateMany({
       where: { status: 'waiting_payment', payment_deadline: { lte: new Date() } },

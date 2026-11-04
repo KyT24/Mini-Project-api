@@ -38,6 +38,33 @@ class SpecialistService {
     }
     static create(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
+            var _b;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .insert({
+                    name: body.name,
+                    description: body.description,
+                    is_active: (_b = body.is_active) !== null && _b !== void 0 ? _b : true,
+                })
+                    .select('*, doctors:doctors(id)')
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        name: data.name,
+                        description: data.description,
+                        is_active: data.is_active,
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                        _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+                    };
+                }
+            }
+            catch (_c) {
+                // Prisma fallback
+            }
             yield this.assertNameAvailable(body.name);
             return yield prisma_client_config_1.prisma.specialists.create({
                 data: body,
@@ -110,11 +137,63 @@ class SpecialistService {
     }
     static getById(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .select('*, doctors:doctors(id)')
+                    .eq('id', params.id)
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        name: data.name,
+                        description: data.description,
+                        is_active: data.is_active,
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                        _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+                    };
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             return yield this.findOrFail(params.id);
         });
     }
     static update(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params, body }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const updateData = { updated_at: new Date().toISOString() };
+                if (body.name !== undefined)
+                    updateData.name = body.name;
+                if (body.description !== undefined)
+                    updateData.description = body.description;
+                if (body.is_active !== undefined)
+                    updateData.is_active = body.is_active;
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .update(updateData)
+                    .eq('id', params.id)
+                    .select('*, doctors:doctors(id)')
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        name: data.name,
+                        description: data.description,
+                        is_active: data.is_active,
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                        _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+                    };
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             if (body.name)
                 yield this.assertNameAvailable(body.name, params.id);
@@ -127,6 +206,21 @@ class SpecialistService {
     }
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .delete()
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             const specialist = yield this.findOrFail(params.id);
             if (specialist._count.doctors) {
                 throw new app_error_1.AppError(409, 'specialist is still used by doctors; deactivate instead');

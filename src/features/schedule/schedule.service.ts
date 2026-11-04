@@ -104,6 +104,38 @@ export class ScheduleService {
   static async create({ body }: createScheduleRequest) {
     const { doctor_id, day_of_week, start_time, end_time, ...schedule } = body;
 
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('doctor_schedules')
+        .insert({
+          doctor_id,
+          day_of_week,
+          start_time: `${start_time}:00`,
+          end_time: `${end_time}:00`,
+          patient_quota: schedule.patient_quota,
+          is_active: schedule.is_active ?? true,
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          doctor_id: data.doctor_id,
+          day_of_week: Number(data.day_of_week),
+          start_time: data.start_time,
+          end_time: data.end_time,
+          patient_quota: Number(data.patient_quota),
+          is_active: Boolean(data.is_active),
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.assertDoctorExists(doctor_id);
     await this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
 
@@ -120,6 +152,39 @@ export class ScheduleService {
 
   // Sesi yang sudah terbentuk tidak ikut berubah, booking lama tetap berlaku
   static async update({ params, body }: updateScheduleRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (body.day_of_week !== undefined) updateData.day_of_week = body.day_of_week;
+      if (body.start_time !== undefined) updateData.start_time = `${body.start_time}:00`;
+      if (body.end_time !== undefined) updateData.end_time = `${body.end_time}:00`;
+      if (body.patient_quota !== undefined) updateData.patient_quota = body.patient_quota;
+      if (body.is_active !== undefined) updateData.is_active = body.is_active;
+
+      const { data, error } = await supabase
+        .from('doctor_schedules')
+        .update(updateData)
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          doctor_id: data.doctor_id,
+          day_of_week: Number(data.day_of_week),
+          start_time: data.start_time,
+          end_time: data.end_time,
+          patient_quota: Number(data.patient_quota),
+          is_active: Boolean(data.is_active),
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     const current = await this.findOrFail(params.id);
 
     const day = body.day_of_week ?? current.day_of_week;
@@ -148,6 +213,22 @@ export class ScheduleService {
   }
 
   static async delete({ params }: scheduleIdRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('doctor_schedules')
+        .delete()
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.findOrFail(params.id);
 
     return await prisma.doctor_schedules.delete({ where: { id: params.id } });

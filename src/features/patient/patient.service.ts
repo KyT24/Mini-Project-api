@@ -1,40 +1,84 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import { updatePatientMeRequest } from '../../validators/patient.validator';
-import { Prisma } from '../../generated/prisma/client';
-
-const userSelect = {
-  id: true,
-  email: true,
-  full_name: true,
-  phone_number: true,
-  role: true,
-  profile_picture: true,
-  patient_profiles: {
-    select: {
-      id: true,
-      date_of_birth: true,
-      gender: true,
-      address: true,
-    },
-  },
-} satisfies Prisma.userSelect;
 
 export class PatientService {
   private static async findPatientOrFail(userId: string) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { ...userSelect, is_active: true },
-    });
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (!user || !user.is_active) throw new AppError(401, 'Unauthorized');
-    if (user.role !== 'PATIENT') {
-      throw new AppError(403, 'only patient can access this resource');
+      if (!error && data) {
+        return {
+          id: data.id,
+          email: '',
+          full_name: data.full_name,
+          phone_number: data.phone_number,
+          role: data.role ? data.role.toUpperCase() : 'PATIENT',
+          profile_picture: data.avatar_url,
+          avatar_url: data.avatar_url,
+          patient_profiles: {
+            id: data.id,
+            date_of_birth: data.date_of_birth,
+            gender: data.gender,
+            address: data.address,
+          },
+          date_of_birth: data.date_of_birth,
+          gender: data.gender,
+          address: data.address,
+        };
+      }
+    } catch {
+      // Continue to Prisma fallback
     }
 
-    const { is_active, ...patient } = user;
+    const profile = await prisma.profiles.findUnique({
+      where: { id: userId },
+    });
 
-    return patient;
+    if (profile) {
+      return {
+        id: profile.id,
+        email: '',
+        full_name: profile.full_name,
+        phone_number: profile.phone_number,
+        role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
+        profile_picture: profile.avatar_url,
+        avatar_url: profile.avatar_url,
+        patient_profiles: {
+          id: profile.id,
+          date_of_birth: profile.date_of_birth,
+          gender: profile.gender,
+          address: profile.address,
+        },
+        date_of_birth: profile.date_of_birth,
+        gender: profile.gender,
+        address: profile.address,
+      };
+    }
+
+    const legacyUser = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (legacyUser) {
+      return {
+        id: legacyUser.id,
+        email: legacyUser.email,
+        full_name: legacyUser.full_name,
+        phone_number: legacyUser.phone_number,
+        role: legacyUser.role,
+        profile_picture: legacyUser.profile_picture,
+        avatar_url: legacyUser.profile_picture,
+        patient_profiles: null,
+      };
+    }
+
+    throw new AppError(404, 'patient not found');
   }
 
   static async getMe(userId: string) {
@@ -42,51 +86,41 @@ export class PatientService {
   }
 
   static async updateMe(userId: string, { body }: updatePatientMeRequest) {
-    const current = await this.findPatientOrFail(userId);
-    const { full_name, email, phone_number, ...profile } = body;
+    const { full_name, phone_number, date_of_birth, gender, address } = body;
 
-    if (email && email !== current.email) {
-      const taken = await prisma.user.findUnique({ where: { email } });
-      if (taken) throw new AppError(409, 'email already registered');
+    const updatePayload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (full_name !== undefined) updatePayload.full_name = full_name;
+    if (phone_number !== undefined) updatePayload.phone_number = phone_number;
+    if (date_of_birth !== undefined) updatePayload.date_of_birth = date_of_birth;
+    if (gender !== undefined) updatePayload.gender = gender;
+    if (address !== undefined) updatePayload.address = address;
+
+    try {
+      const supabase = getSupabaseClient();
+      await supabase.from('profiles').update(updatePayload).eq('id', userId);
+    } catch {
+      // Continue to Prisma fallback
     }
 
-    if (phone_number && phone_number !== current.phone_number) {
-      const taken = await prisma.user.findUnique({ where: { phone_number } });
-      if (taken) throw new AppError(409, 'phone number already registered');
+    try {
+      await prisma.profiles.update({
+        where: { id: userId },
+        data: {
+          ...(full_name !== undefined ? { full_name } : {}),
+          ...(phone_number !== undefined ? { phone_number } : {}),
+          ...(date_of_birth !== undefined
+            ? { date_of_birth: date_of_birth ? new Date(date_of_birth) : null }
+            : {}),
+          ...(gender !== undefined ? { gender: gender as any } : {}),
+          ...(address !== undefined ? { address } : {}),
+        },
+      });
+    } catch {
+      // Continue
     }
 
-    // Hanya kolom profil yang dikirim (bukan undefined) yang ikut diubah
-    const profileData: Prisma.patient_profilesCreateWithoutUsersInput = {};
-
-    if (profile.date_of_birth !== undefined) {
-      // null = kosongkan tanggal lahir
-      if (profile.date_of_birth) {
-        profileData.date_of_birth = new Date(profile.date_of_birth);
-      } else {
-        profileData.date_of_birth = null;
-      }
-    }
-    if (profile.gender !== undefined) {
-      profileData.gender = profile.gender;
-    }
-    if (profile.address !== undefined) {
-      profileData.address = profile.address;
-    }
-
-    const data: Prisma.userUpdateInput = { full_name, email, phone_number };
-
-    // patient_profiles dibuat otomatis bila belum ada
-    const hasProfileChanges = Object.keys(profileData).length > 0;
-    if (hasProfileChanges) {
-      data.patient_profiles = {
-        upsert: { create: profileData, update: profileData },
-      };
-    }
-
-    return await prisma.user.update({
-      where: { id: userId },
-      data,
-      select: userSelect,
-    });
+    return await this.findPatientOrFail(userId);
   }
 }

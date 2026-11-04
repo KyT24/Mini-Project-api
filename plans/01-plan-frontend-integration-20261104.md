@@ -167,10 +167,19 @@ Skema Prisma di `prisma/schema.prisma` akan diselaraskan dengan struktur tabel S
 3. **Kompatibilitas Penuh Frontend**:
    Seluruh kebutuhan operasional hari H (check-in QR, antrean TV display, panggil nomor, no-show, dan statistik) telah terpasang dan siap dikonsumsi langsung oleh frontend.
 
-## 5. Rencana Pembaruan Dokumentasi Aplikasi
+## 6. Sinkronisasi Penuh Prisma Schema 1:1 dengan Supabase & Hasil Uji Data Nyata
 
-Dokumen-dokumen di dalam aplikasi backend `api-clinic-appointment` akan diperbarui:
-1. **`README.md`**: Menambahkan daftar endpoint baru (Check-in, Live Queue, Call Next, No-Show, Dashboard Metrics, Statistic Charts) dan panduan integrasi frontend.
-2. **`AGENT.md`**: Menambahkan petunjuk operasional khusus untuk penanganan antrean fisik hari H vs approval, serta aturan skema basis data bersama.
-3. **`TECH.md`**: Memperbarui ERD arsitektur gabungan dan mendokumentasikan algoritma check-in serta kalkulasi statistik dashboard.
+Pada 2026-11-04, skema Prisma [`prisma/schema.prisma`](file:///Users/oktaviardi/Okta/api-clinic-appointment/prisma/schema.prisma) telah diperbarui 100% selaras dengan skema Supabase di `/Users/oktaviardi/Okta/clinic-appointment-platform/supabase/migrations/`:
+- **Model Utama**: `profiles`, `specialists`, `doctors`, `doctor_schedules`, `practice_sessions`, `appointments`, `ratings`.
+- **Kolom Kunci**:
+  - `doctors`: menggunakan `photo_url` dan tidak mewajibkan `user_id`.
+  - `appointments`: menggunakan `code`, `patient_id` (ke `profiles.id`), `session_id`, `consultation_fee`, `payment_deadline`, `payment_proof_path`, `payment_uploaded_at`, `rejection_reason`, `confirmed_at`, `booking_number`, `qr_token`, `checked_in_at`, `queue_number`, `is_no_show`.
+  - `practice_sessions`: kalkulasi status dan ketersediaan kuota dinamis sesuai jadwal dan relasi `appointments`.
+- **Hasil Verifikasi Uji Data Nyata (Live Supabase Verification)**:
+  - `SpecialistService.getAll`: Berhasil mengambil 5 spesialisasi riil dari Supabase (*Bedah Plastik, Dermatologi, Dokter Estetika Medik, Laser & Kosmetika, Trikologi*).
+  - `DoctorService.getAll`: Berhasil mengambil 6 profil dokter riil beserta jadwal dan rating dari Supabase (*dr. Maya Lestari, dr. Gisella Valerie, dr. Kevin Prasetya, dr. Natasha Wijaya, dr. Amanda Clarissa, dr. Reza Mahendra*).
+  - `AppointmentAdminService.getAll`: Berhasil membaca reservasi pasien langsung dari Supabase PostgREST client.
+  - `QueueService`: Berhasil memproses token check-in QR dan antrean live ruang tunggu.
+  - Build produksi (`npm run build`: `prisma generate && tsc`): **0 errors, sukses 100%**.
+
 

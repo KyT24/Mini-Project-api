@@ -42,15 +42,16 @@ class QueueService {
             }
             const appointment = yield prisma_client_config_1.prisma.appointments.findFirst({
                 where: {
-                    OR: [{ qr_token: token }, { appointment_code: token }, { code: token }],
+                    OR: [{ qr_token: token }, { code: token }],
                 },
                 include: {
-                    doctors: { select: { id: true, full_name: true, photo: true, photo_url: true } },
+                    doctors: { select: { id: true, full_name: true, photo_url: true } },
                     practice_sessions: true,
-                    patient_profiles: {
+                    profiles: {
                         select: {
                             id: true,
-                            users: { select: { full_name: true, phone_number: true, email: true } },
+                            full_name: true,
+                            phone_number: true,
                         },
                     },
                 },
@@ -102,12 +103,13 @@ class QueueService {
                         queue_number: nextQueue,
                     },
                     include: {
-                        doctors: { select: { id: true, full_name: true, photo: true, photo_url: true } },
+                        doctors: { select: { id: true, full_name: true, photo_url: true } },
                         practice_sessions: true,
-                        patient_profiles: {
+                        profiles: {
                             select: {
                                 id: true,
-                                users: { select: { full_name: true, phone_number: true, email: true } },
+                                full_name: true,
+                                phone_number: true,
                             },
                         },
                     },
@@ -146,7 +148,6 @@ class QueueService {
                         select: {
                             id: true,
                             full_name: true,
-                            photo: true,
                             photo_url: true,
                             specialists: { select: { name: true } },
                         },
@@ -179,7 +180,7 @@ class QueueService {
                     doctor: {
                         id: session.doctors.id,
                         full_name: session.doctors.full_name,
-                        photo: session.doctors.photo_url || session.doctors.photo,
+                        photo: session.doctors.photo_url || null,
                         specialist: (_c = (_b = session.doctors.specialists) === null || _b === void 0 ? void 0 : _b.name) !== null && _c !== void 0 ? _c : 'Dokter Estetika',
                     },
                     schedule: {

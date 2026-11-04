@@ -8,51 +8,84 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PatientService = void 0;
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
-const userSelect = {
-    id: true,
-    email: true,
-    full_name: true,
-    phone_number: true,
-    role: true,
-    profile_picture: true,
-    patient_profiles: {
-        select: {
-            id: true,
-            date_of_birth: true,
-            gender: true,
-            address: true,
-        },
-    },
-};
+const supabase_lib_1 = require("../../lib/supabase.lib");
 class PatientService {
     static findPatientOrFail(userId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const user = yield prisma_client_config_1.prisma.user.findUnique({
-                where: { id: userId },
-                select: Object.assign(Object.assign({}, userSelect), { is_active: true }),
-            });
-            if (!user || !user.is_active)
-                throw new app_error_1.AppError(401, 'Unauthorized');
-            if (user.role !== 'PATIENT') {
-                throw new app_error_1.AppError(403, 'only patient can access this resource');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', userId)
+                    .maybeSingle();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        email: '',
+                        full_name: data.full_name,
+                        phone_number: data.phone_number,
+                        role: data.role ? data.role.toUpperCase() : 'PATIENT',
+                        profile_picture: data.avatar_url,
+                        avatar_url: data.avatar_url,
+                        patient_profiles: {
+                            id: data.id,
+                            date_of_birth: data.date_of_birth,
+                            gender: data.gender,
+                            address: data.address,
+                        },
+                        date_of_birth: data.date_of_birth,
+                        gender: data.gender,
+                        address: data.address,
+                    };
+                }
             }
-            const { is_active } = user, patient = __rest(user, ["is_active"]);
-            return patient;
+            catch (_a) {
+                // Continue to Prisma fallback
+            }
+            const profile = yield prisma_client_config_1.prisma.profiles.findUnique({
+                where: { id: userId },
+            });
+            if (profile) {
+                return {
+                    id: profile.id,
+                    email: '',
+                    full_name: profile.full_name,
+                    phone_number: profile.phone_number,
+                    role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
+                    profile_picture: profile.avatar_url,
+                    avatar_url: profile.avatar_url,
+                    patient_profiles: {
+                        id: profile.id,
+                        date_of_birth: profile.date_of_birth,
+                        gender: profile.gender,
+                        address: profile.address,
+                    },
+                    date_of_birth: profile.date_of_birth,
+                    gender: profile.gender,
+                    address: profile.address,
+                };
+            }
+            const legacyUser = yield prisma_client_config_1.prisma.user.findUnique({
+                where: { id: userId },
+            });
+            if (legacyUser) {
+                return {
+                    id: legacyUser.id,
+                    email: legacyUser.email,
+                    full_name: legacyUser.full_name,
+                    phone_number: legacyUser.phone_number,
+                    role: legacyUser.role,
+                    profile_picture: legacyUser.profile_picture,
+                    avatar_url: legacyUser.profile_picture,
+                    patient_profiles: null,
+                };
+            }
+            throw new app_error_1.AppError(404, 'patient not found');
         });
     }
     static getMe(userId) {
@@ -62,48 +95,39 @@ class PatientService {
     }
     static updateMe(userId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (userId, { body }) {
-            const current = yield this.findPatientOrFail(userId);
-            const { full_name, email, phone_number } = body, profile = __rest(body, ["full_name", "email", "phone_number"]);
-            if (email && email !== current.email) {
-                const taken = yield prisma_client_config_1.prisma.user.findUnique({ where: { email } });
-                if (taken)
-                    throw new app_error_1.AppError(409, 'email already registered');
+            const { full_name, phone_number, date_of_birth, gender, address } = body;
+            const updatePayload = {
+                updated_at: new Date().toISOString(),
+            };
+            if (full_name !== undefined)
+                updatePayload.full_name = full_name;
+            if (phone_number !== undefined)
+                updatePayload.phone_number = phone_number;
+            if (date_of_birth !== undefined)
+                updatePayload.date_of_birth = date_of_birth;
+            if (gender !== undefined)
+                updatePayload.gender = gender;
+            if (address !== undefined)
+                updatePayload.address = address;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                yield supabase.from('profiles').update(updatePayload).eq('id', userId);
             }
-            if (phone_number && phone_number !== current.phone_number) {
-                const taken = yield prisma_client_config_1.prisma.user.findUnique({ where: { phone_number } });
-                if (taken)
-                    throw new app_error_1.AppError(409, 'phone number already registered');
+            catch (_b) {
+                // Continue to Prisma fallback
             }
-            // Hanya kolom profil yang dikirim (bukan undefined) yang ikut diubah
-            const profileData = {};
-            if (profile.date_of_birth !== undefined) {
-                // null = kosongkan tanggal lahir
-                if (profile.date_of_birth) {
-                    profileData.date_of_birth = new Date(profile.date_of_birth);
-                }
-                else {
-                    profileData.date_of_birth = null;
-                }
+            try {
+                yield prisma_client_config_1.prisma.profiles.update({
+                    where: { id: userId },
+                    data: Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (full_name !== undefined ? { full_name } : {})), (phone_number !== undefined ? { phone_number } : {})), (date_of_birth !== undefined
+                        ? { date_of_birth: date_of_birth ? new Date(date_of_birth) : null }
+                        : {})), (gender !== undefined ? { gender: gender } : {})), (address !== undefined ? { address } : {})),
+                });
             }
-            if (profile.gender !== undefined) {
-                profileData.gender = profile.gender;
+            catch (_c) {
+                // Continue
             }
-            if (profile.address !== undefined) {
-                profileData.address = profile.address;
-            }
-            const data = { full_name, email, phone_number };
-            // patient_profiles dibuat otomatis bila belum ada
-            const hasProfileChanges = Object.keys(profileData).length > 0;
-            if (hasProfileChanges) {
-                data.patient_profiles = {
-                    upsert: { create: profileData, update: profileData },
-                };
-            }
-            return yield prisma_client_config_1.prisma.user.update({
-                where: { id: userId },
-                data,
-                select: userSelect,
-            });
+            return yield this.findPatientOrFail(userId);
         });
     }
 }

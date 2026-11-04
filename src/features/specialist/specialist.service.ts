@@ -33,6 +33,33 @@ export class SpecialistService {
   }
 
   static async create({ body }: createSpecialistRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .insert({
+          name: body.name,
+          description: body.description,
+          is_active: body.is_active ?? true,
+        })
+        .select('*, doctors:doctors(id)')
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.assertNameAvailable(body.name);
 
     return await prisma.specialists.create({
@@ -111,10 +138,62 @@ export class SpecialistService {
   }
 
   static async getById({ params }: specialistIdRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .select('*, doctors:doctors(id)')
+        .eq('id', params.id)
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     return await this.findOrFail(params.id);
   }
 
   static async update({ params, body }: updateSpecialistRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const updateData: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (body.name !== undefined) updateData.name = body.name;
+      if (body.description !== undefined) updateData.description = body.description;
+      if (body.is_active !== undefined) updateData.is_active = body.is_active;
+
+      const { data, error } = await supabase
+        .from('specialists')
+        .update(updateData)
+        .eq('id', params.id)
+        .select('*, doctors:doctors(id)')
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          _count: { doctors: Array.isArray(data.doctors) ? data.doctors.length : 0 },
+        };
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     await this.findOrFail(params.id);
     if (body.name) await this.assertNameAvailable(body.name, params.id);
 
@@ -126,6 +205,22 @@ export class SpecialistService {
   }
 
   static async delete({ params }: specialistIdRequest) {
+    try {
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase
+        .from('specialists')
+        .delete()
+        .eq('id', params.id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return data;
+      }
+    } catch {
+      // Prisma fallback
+    }
+
     const specialist = await this.findOrFail(params.id);
 
     if (specialist._count.doctors) {
