@@ -521,36 +521,43 @@ class AppointmentService {
             if (appointment.status !== 'waiting_payment') {
                 throw new app_error_1.AppError(409, 'Payment proof has already been uploaded');
             }
-            let imageUrl;
-            const pathPrefix = `${appointment.id}/${Date.now()}`;
+            let proofPath;
+            let userClient;
+            try {
+                userClient = yield (0, supabase_lib_1.getSupabaseUserClient)(userId);
+            }
+            catch (_b) {
+                // fallback to default client if token unavailable
+            }
             if (file) {
+                const bucket = supabase_lib_1.Storage.getPaymentProofsBucket();
                 const extension = file.mimetype.split('/')[1] || 'jpg';
-                imageUrl = yield supabase_lib_1.Storage.upload(`${pathPrefix}.${extension}`, file);
+                const filePath = `${userId}/${appointment.id}-${Date.now()}.${extension}`;
+                proofPath = yield supabase_lib_1.Storage.upload(filePath, file, bucket, userClient);
+            }
+            else if (imageBase64) {
+                proofPath = imageBase64;
             }
             else {
-                imageUrl = yield supabase_lib_1.Storage.uploadBase64(`${pathPrefix}.jpg`, imageBase64);
+                throw new app_error_1.AppError(422, 'Payment proof image is required');
             }
-            // 1. Coba update via Supabase PostgREST terlebih dahulu
+            // 1. Eksekusi via Supabase RPC submit_payment_proof (SECURITY DEFINER)
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                const { data: updatedAppt, error } = yield supabase
-                    .from('appointments')
-                    .update({
-                    status: 'waiting_confirmation',
-                    payment_proof_path: imageUrl,
-                    payment_uploaded_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
-                })
-                    .eq('id', appointment.id)
-                    .eq('status', 'waiting_payment')
-                    .gt('payment_deadline', new Date().toISOString())
-                    .select()
-                    .maybeSingle();
+                const client = userClient || (yield (0, supabase_lib_1.getSupabaseUserClient)(userId));
+                const { data: updatedAppt, error } = yield client.rpc('submit_payment_proof', {
+                    p_appointment_id: appointment.id,
+                    p_path: proofPath,
+                });
                 if (!error && updatedAppt) {
                     return this.getOwnById(userId, { params });
                 }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(400, error.message);
+                }
             }
-            catch (_b) {
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
                 // Prisma fallback
             }
             // 2. Prisma fallback
@@ -563,7 +570,7 @@ class AppointmentService {
                     },
                     data: {
                         status: 'waiting_confirmation',
-                        payment_proof_path: imageUrl,
+                        payment_proof_path: proofPath,
                         payment_uploaded_at: new Date(),
                     },
                 });
@@ -586,20 +593,21 @@ class AppointmentService {
                 throw new app_error_1.AppError(409, 'Appointment can no longer be canceled');
             }
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                yield supabase
-                    .from('appointments')
-                    .update({
-                    status: 'canceled',
-                    queue_number: null,
-                    qr_token: null,
-                    updated_at: new Date().toISOString(),
-                })
-                    .eq('id', appointment.id)
-                    .eq('patient_id', userId);
+                const client = yield (0, supabase_lib_1.getSupabaseUserClient)(userId);
+                const { data, error } = yield client.rpc('cancel_appointment', {
+                    p_appointment_id: appointment.id,
+                });
+                if (!error && data) {
+                    return this.getOwnById(userId, { params });
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(409, error.message);
+                }
             }
-            catch (_b) {
-                // Continue
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+                // Continue to Prisma fallback
             }
             try {
                 yield prisma_client_config_1.prisma.$transaction((tx) => __awaiter(this, void 0, void 0, function* () {
@@ -620,7 +628,7 @@ class AppointmentService {
                     }
                 }));
             }
-            catch (_c) {
+            catch (_b) {
                 // Continue
             }
             return this.getOwnById(userId, { params });
@@ -637,19 +645,22 @@ class AppointmentService {
                 throw new app_error_1.AppError(422, 'Appointment can be rated after the session is completed');
             }
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                const { error: rateErr } = yield supabase.from('ratings').insert({
-                    appointment_id: appointment.id,
-                    patient_id: appointment.patient_id,
-                    doctor_id: appointment.doctor_id,
-                    rating: body.rating,
-                    review: (_b = body.review) !== null && _b !== void 0 ? _b : null,
+                const client = yield (0, supabase_lib_1.getSupabaseUserClient)(userId);
+                const { data, error: rateErr } = yield client.rpc('rate_appointment', {
+                    p_appointment_id: appointment.id,
+                    p_rating: body.rating,
+                    p_review: (_b = body.review) !== null && _b !== void 0 ? _b : null,
                 });
-                if (!rateErr) {
+                if (!rateErr && data) {
                     return this.getOwnById(userId, { params });
                 }
+                if (rateErr && rateErr.message) {
+                    throw new app_error_1.AppError(409, rateErr.message);
+                }
             }
-            catch (_d) {
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
                 // Prisma fallback
             }
             try {

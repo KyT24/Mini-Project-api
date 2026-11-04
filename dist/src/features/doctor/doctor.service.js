@@ -280,16 +280,23 @@ class DoctorService {
         });
     }
     // Unggah foto lalu kembalikan URL; disimpan ke dokter lewat create/update
-    static uploadPhoto(file) {
+    static uploadPhoto(file, imageBase64) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!file)
+            if (!file && !imageBase64)
                 throw new app_error_1.AppError(422, 'Photo image is required');
-            // Nama file unik, contoh: "doctors/1761800000000-a1b2c3d4.png"
-            const extension = file.mimetype.split('/')[1]; // "image/png" → "png"
+            const bucket = supabase_lib_1.Storage.getDoctorPhotosBucket();
             const randomPart = (0, crypto_1.randomBytes)(4).toString('hex');
-            const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
-            const url = yield supabase_lib_1.Storage.upload(fileName, file);
-            return { url };
+            let url;
+            if (file) {
+                const extension = file.mimetype.split('/')[1] || 'png';
+                const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
+                url = yield supabase_lib_1.Storage.upload(fileName, file, bucket);
+            }
+            else {
+                const fileName = `doctors/${Date.now()}-${randomPart}.jpg`;
+                url = yield supabase_lib_1.Storage.uploadBase64(fileName, imageBase64, bucket);
+            }
+            return { url, photo_url: url };
         });
     }
     // Profil dokter + ringkasan rating & ulasan terbaru

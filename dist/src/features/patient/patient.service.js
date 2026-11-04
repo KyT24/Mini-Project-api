@@ -115,7 +115,7 @@ class PatientService {
             if (address !== undefined)
                 updatePayload.address = address;
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)(userId);
                 yield supabase.from('profiles').update(updatePayload).eq('id', userId);
             }
             catch (_b) {

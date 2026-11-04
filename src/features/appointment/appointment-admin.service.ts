@@ -327,61 +327,16 @@ export class AppointmentAdminService {
 
     try {
       const supabase = getSupabaseClient();
-      const { data: appt } = await supabase
-        .from('appointments')
-        .select('*')
-        .eq('id', params.id)
-        .single();
+      const { data: updated, error } = await supabase.rpc('approve_appointment', {
+        p_appointment_id: params.id,
+      });
 
-      if (appt) {
-        if (appt.status !== 'waiting_confirmation') {
-          throw new AppError(409, `Appointment is ${appt.status}, cannot be approved`);
-        }
+      if (!error && updated) {
+        return await this.findOrFail(params.id);
+      }
 
-        const { data: maxQ } = await supabase
-          .from('appointments')
-          .select('queue_number')
-          .eq('session_id', appt.session_id)
-          .order('queue_number', { ascending: false })
-          .limit(1);
-
-        const nextQueueNumber = ((maxQ && maxQ[0]?.queue_number) || 0) + 1;
-        const qrToken = randomUUID();
-
-        const { data: updated, error } = await supabase
-          .from('appointments')
-          .update({
-            status: 'done',
-            confirmed_at: new Date().toISOString(),
-            queue_number: nextQueueNumber,
-            qr_token: qrToken,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', params.id)
-          .select(
-            `
-            *,
-            profiles:patient_id(id, full_name, phone_number, role, avatar_url),
-            doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
-            practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
-            ratings(id, rating, review)
-          `,
-          )
-          .single();
-
-        if (!error && updated) {
-          return {
-            ...updated,
-            patient_profiles: {
-              id: updated.patient_id,
-              users: {
-                full_name: updated.profiles?.full_name || 'Pasien',
-                email: '',
-                phone_number: updated.profiles?.phone_number || null,
-              },
-            },
-          };
-        }
+      if (error && error.message) {
+        throw new AppError(409, error.message);
       }
     } catch (e: any) {
       if (e instanceof AppError) throw e;
@@ -441,38 +396,17 @@ export class AppointmentAdminService {
 
     try {
       const supabase = getSupabaseClient();
-      const { data: updated, error } = await supabase
-        .from('appointments')
-        .update({
-          status: 'rejected',
-          rejection_reason: body.reason,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', params.id)
-        .eq('status', 'waiting_confirmation')
-        .select(
-          `
-          *,
-          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
-          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
-          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
-          ratings(id, rating, review)
-        `,
-        )
-        .single();
+      const { data: updated, error } = await supabase.rpc('reject_appointment', {
+        p_appointment_id: params.id,
+        p_reason: body.reason || 'Ditolak admin',
+      });
 
       if (!error && updated) {
-        return {
-          ...updated,
-          patient_profiles: {
-            id: updated.patient_id,
-            users: {
-              full_name: updated.profiles?.full_name || 'Pasien',
-              email: '',
-              phone_number: updated.profiles?.phone_number || null,
-            },
-          },
-        };
+        return await this.findOrFail(params.id);
+      }
+
+      if (error && error.message) {
+        throw new AppError(409, error.message);
       }
     } catch (e: any) {
       if (e instanceof AppError) throw e;

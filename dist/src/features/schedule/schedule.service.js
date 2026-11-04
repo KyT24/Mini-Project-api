@@ -186,6 +186,8 @@ class ScheduleService {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
             var _b;
             const { doctor_id, day_of_week, start_time, end_time } = body, schedule = __rest(body, ["doctor_id", "day_of_week", "start_time", "end_time"]);
+            yield this.assertDoctorExists(doctor_id);
+            yield this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
                 const { data, error } = yield supabase
@@ -193,8 +195,8 @@ class ScheduleService {
                     .insert({
                     doctor_id,
                     day_of_week,
-                    start_time: `${start_time}:00`,
-                    end_time: `${end_time}:00`,
+                    start_time: `${start_time.slice(0, 5)}:00`,
+                    end_time: `${end_time.slice(0, 5)}:00`,
                     patient_quota: schedule.patient_quota,
                     is_active: (_b = schedule.is_active) !== null && _b !== void 0 ? _b : true,
                 })
@@ -213,16 +215,26 @@ class ScheduleService {
                         updated_at: data.updated_at,
                     };
                 }
+                if (error && error.code === '23505') {
+                    throw new app_error_1.AppError(409, 'Doctor already has a schedule at this day and start time');
+                }
             }
-            catch (_c) {
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
                 // Prisma fallback
             }
-            yield this.assertDoctorExists(doctor_id);
-            yield this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
-            return yield prisma_client_config_1.prisma.doctor_schedules.create({
-                data: Object.assign(Object.assign({}, schedule), { doctor_id,
-                    day_of_week, start_time: (0, time_lib_1.toDbTime)(start_time), end_time: (0, time_lib_1.toDbTime)(end_time) }),
-            });
+            try {
+                return yield prisma_client_config_1.prisma.doctor_schedules.create({
+                    data: Object.assign(Object.assign({}, schedule), { doctor_id,
+                        day_of_week, start_time: (0, time_lib_1.toDbTime)(start_time.slice(0, 5)), end_time: (0, time_lib_1.toDbTime)(end_time.slice(0, 5)) }),
+                });
+            }
+            catch (prismaErr) {
+                if (prismaErr instanceof app_error_1.AppError)
+                    throw prismaErr;
+                throw new app_error_1.AppError(500, 'Gagal menambahkan jadwal dokter');
+            }
         });
     }
     // Sesi yang sudah terbentuk tidak ikut berubah, booking lama tetap berlaku

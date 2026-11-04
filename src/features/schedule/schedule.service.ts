@@ -181,6 +181,9 @@ export class ScheduleService {
   static async create({ body }: createScheduleRequest) {
     const { doctor_id, day_of_week, start_time, end_time, ...schedule } = body;
 
+    await this.assertDoctorExists(doctor_id);
+    await this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
+
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
@@ -188,8 +191,8 @@ export class ScheduleService {
         .insert({
           doctor_id,
           day_of_week,
-          start_time: `${start_time}:00`,
-          end_time: `${end_time}:00`,
+          start_time: `${start_time.slice(0, 5)}:00`,
+          end_time: `${end_time.slice(0, 5)}:00`,
           patient_quota: schedule.patient_quota,
           is_active: schedule.is_active ?? true,
         })
@@ -209,22 +212,29 @@ export class ScheduleService {
           updated_at: data.updated_at,
         };
       }
-    } catch {
+
+      if (error && error.code === '23505') {
+        throw new AppError(409, 'Doctor already has a schedule at this day and start time');
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
       // Prisma fallback
     }
 
-    await this.assertDoctorExists(doctor_id);
-    await this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
-
-    return await prisma.doctor_schedules.create({
-      data: {
-        ...schedule,
-        doctor_id,
-        day_of_week,
-        start_time: toDbTime(start_time),
-        end_time: toDbTime(end_time),
-      },
-    });
+    try {
+      return await prisma.doctor_schedules.create({
+        data: {
+          ...schedule,
+          doctor_id,
+          day_of_week,
+          start_time: toDbTime(start_time.slice(0, 5)),
+          end_time: toDbTime(end_time.slice(0, 5)),
+        },
+      });
+    } catch (prismaErr: any) {
+      if (prismaErr instanceof AppError) throw prismaErr;
+      throw new AppError(500, 'Gagal menambahkan jadwal dokter');
+    }
   }
 
   // Sesi yang sudah terbentuk tidak ikut berubah, booking lama tetap berlaku

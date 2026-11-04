@@ -35,7 +35,10 @@ export class DoctorController {
   }
 
   static async uploadPhoto(req: Request, res: Response) {
-    const photo = await DoctorService.uploadPhoto(req.file);
+    const photo = await DoctorService.uploadPhoto(
+      req.file,
+      req.body?.image_base64 || req.body?.photo_base64,
+    );
 
     res.status(201).json({
       success: true,

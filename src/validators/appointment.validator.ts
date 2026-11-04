@@ -6,10 +6,12 @@ const doctor_id = uuidValidator('Doctor id must be a valid uuid');
 // Tanggal kalender "YYYY-MM-DD" (zona waktu klinik)
 const session_date = z.iso.date('Session date must be in YYYY-MM-DD format');
 
-// Jam mulai jadwal "HH:mm"; dicocokkan dengan jadwal dokter di service
+// Jam mulai jadwal "HH:mm" atau "HH:mm:ss"; dinormalisasi ke HH:mm
 const start_time = z
   .string('Schedule is required')
-  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Schedule is not available');
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Schedule is not available')
+  .transform((val) => val.slice(0, 5));
 
 export const getAvailabilitySchema = z.object({
   query: z.object({ doctor_id, date: session_date }),

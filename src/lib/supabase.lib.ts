@@ -158,14 +158,29 @@ export const getSupabaseUserClient = async (userId: string): Promise<SupabaseCli
 const getClient = getSupabaseClient;
 
 export class Storage {
+  static getDoctorPhotosBucket(): string {
+    return process.env.SUPABASE_BUCKET_DOCTOR_PHOTOS || 'doctor-photos';
+  }
+
+  static getPaymentProofsBucket(): string {
+    return process.env.SUPABASE_BUCKET_PAYMENT_PROOFS || 'payment-proofs';
+  }
+
   // Unggah buffer lalu kembalikan URL publiknya
-  static async uploadBuffer(path: string, buffer: Buffer, contentType: string) {
-    const bucket = process.env.SUPABASE_BUCKET || 'payment-proofs';
-    const storage = getClient().storage.from(bucket);
+  static async uploadBuffer(
+    path: string,
+    buffer: Buffer,
+    contentType: string,
+    bucketName?: string,
+    client?: SupabaseClient
+  ) {
+    const bucket = bucketName || this.getDoctorPhotosBucket();
+    const supabase = client || getClient();
+    const storage = supabase.storage.from(bucket);
 
     const { error } = await storage.upload(path, buffer, {
       contentType,
-      upsert: false,
+      upsert: true,
     });
     if (error) throw new AppError(502, `failed to upload file: ${error.message}`);
 
@@ -173,18 +188,28 @@ export class Storage {
   }
 
   // Unggah file (Multer)
-  static async upload(path: string, file: Express.Multer.File) {
-    return this.uploadBuffer(path, file.buffer, file.mimetype);
+  static async upload(
+    path: string,
+    file: Express.Multer.File,
+    bucketName?: string,
+    client?: SupabaseClient
+  ) {
+    return this.uploadBuffer(path, file.buffer, file.mimetype, bucketName, client);
   }
 
   // Unggah string Base64 Data URL
-  static async uploadBase64(path: string, base64String: string) {
+  static async uploadBase64(
+    path: string,
+    base64String: string,
+    bucketName?: string,
+    client?: SupabaseClient
+  ) {
     const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     if (!matches || matches.length !== 3) {
       throw new AppError(422, 'Format gambar Base64 tidak valid');
     }
     const contentType = matches[1];
     const buffer = Buffer.from(matches[2], 'base64');
-    return this.uploadBuffer(path, buffer, contentType);
+    return this.uploadBuffer(path, buffer, contentType, bucketName, client);
   }
 }

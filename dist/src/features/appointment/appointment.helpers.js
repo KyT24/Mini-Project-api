@@ -39,7 +39,14 @@ const clinicNow = () => {
 };
 exports.clinicNow = clinicNow;
 // Kolom @db.Date sesi → "YYYY-MM-DD"
-const sessionDateOf = (session) => session.session_date.toISOString().slice(0, 10);
+const sessionDateOf = (session) => {
+    if (!session || !session.session_date)
+        return '';
+    if (typeof session.session_date === 'string') {
+        return session.session_date.slice(0, 10);
+    }
+    return session.session_date.toISOString().slice(0, 10);
+};
 const sessionStartsAt = (session) => (0, exports.slotStartsAt)(sessionDateOf(session), (0, time_lib_1.fromDbTime)(session.start_time));
 exports.sessionStartsAt = sessionStartsAt;
 const sessionEndsAt = (session) => (0, exports.slotStartsAt)(sessionDateOf(session), (0, time_lib_1.fromDbTime)(session.end_time));
@@ -122,7 +129,10 @@ function describe(appointment) {
     // Sisa waktu bayar (detik), hanya untuk status waiting_payment. Tidak boleh minus
     let remaining_seconds = 0;
     if (appointment.status === 'waiting_payment' && appointment.payment_deadline) {
-        const remainingMs = appointment.payment_deadline.getTime() - now;
+        const deadlineMs = typeof appointment.payment_deadline === 'string'
+            ? new Date(appointment.payment_deadline).getTime()
+            : appointment.payment_deadline.getTime();
+        const remainingMs = deadlineMs - now;
         remaining_seconds = Math.max(Math.floor(remainingMs / 1000), 0);
     }
     // Boleh dibatalkan selama sesi belum mulai, dan statusnya masih aktif

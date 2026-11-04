@@ -57,7 +57,11 @@ export class QueueService {
 
     // Validasi tanggal praktik adalah HARI INI (WIB)
     const todayWib = clinicNow().date;
-    const sessionDateStr = appointment.practice_sessions.session_date.toISOString().slice(0, 10);
+    const sessionDateVal = appointment.practice_sessions.session_date as Date | string;
+    const sessionDateStr =
+      typeof sessionDateVal === 'string'
+        ? sessionDateVal.slice(0, 10)
+        : sessionDateVal.toISOString().slice(0, 10);
     if (sessionDateStr !== todayWib) {
       throw new AppError(
         422,

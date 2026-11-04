@@ -286,16 +286,23 @@ export class DoctorService {
   }
 
   // Unggah foto lalu kembalikan URL; disimpan ke dokter lewat create/update
-  static async uploadPhoto(file?: Express.Multer.File) {
-    if (!file) throw new AppError(422, 'Photo image is required');
+  static async uploadPhoto(file?: Express.Multer.File, imageBase64?: string) {
+    if (!file && !imageBase64) throw new AppError(422, 'Photo image is required');
 
-    // Nama file unik, contoh: "doctors/1761800000000-a1b2c3d4.png"
-    const extension = file.mimetype.split('/')[1]; // "image/png" → "png"
+    const bucket = Storage.getDoctorPhotosBucket();
     const randomPart = randomBytes(4).toString('hex');
-    const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
-    const url = await Storage.upload(fileName, file);
+    let url: string;
 
-    return { url };
+    if (file) {
+      const extension = file.mimetype.split('/')[1] || 'png';
+      const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
+      url = await Storage.upload(fileName, file, bucket);
+    } else {
+      const fileName = `doctors/${Date.now()}-${randomPart}.jpg`;
+      url = await Storage.uploadBase64(fileName, imageBase64!, bucket);
+    }
+
+    return { url, photo_url: url };
   }
 
   // Profil dokter + ringkasan rating & ulasan terbaru

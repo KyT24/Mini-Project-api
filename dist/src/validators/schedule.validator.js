@@ -53,7 +53,9 @@ const day_of_week = z.coerce
     .max(6, 'Day must be between 0 and 6');
 const time = z
     .string('Time is required')
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be in HH:mm format');
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Time must be in HH:mm or HH:mm:ss format')
+    .transform((val) => val.slice(0, 5));
 const patient_quota = z.coerce
     .number('Patient quota must be a number')
     .int('Patient quota must be an integer')

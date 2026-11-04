@@ -31,13 +31,18 @@ export const clinicNow = () => {
 };
 
 // Kolom @db.Date sesi → "YYYY-MM-DD"
-const sessionDateOf = (session: { session_date: Date }) =>
-  session.session_date.toISOString().slice(0, 10);
+const sessionDateOf = (session: { session_date: Date | string }) => {
+  if (!session || !session.session_date) return '';
+  if (typeof session.session_date === 'string') {
+    return session.session_date.slice(0, 10);
+  }
+  return session.session_date.toISOString().slice(0, 10);
+};
 
-export const sessionStartsAt = (session: { session_date: Date; start_time: Date }) =>
+export const sessionStartsAt = (session: { session_date: Date | string; start_time: Date | string }) =>
   slotStartsAt(sessionDateOf(session), fromDbTime(session.start_time));
 
-export const sessionEndsAt = (session: { session_date: Date; end_time: Date }) =>
+export const sessionEndsAt = (session: { session_date: Date | string; end_time: Date | string }) =>
   slotStartsAt(sessionDateOf(session), fromDbTime(session.end_time));
 
 // Janji temu yang memakai kuota: sudah bayar / menunggu konfirmasi,
@@ -120,7 +125,11 @@ export function describe<T extends Describable>(appointment: T) {
   // Sisa waktu bayar (detik), hanya untuk status waiting_payment. Tidak boleh minus
   let remaining_seconds = 0;
   if (appointment.status === 'waiting_payment' && appointment.payment_deadline) {
-    const remainingMs = appointment.payment_deadline.getTime() - now;
+    const deadlineMs =
+      typeof (appointment.payment_deadline as any) === 'string'
+        ? new Date(appointment.payment_deadline).getTime()
+        : appointment.payment_deadline.getTime();
+    const remainingMs = deadlineMs - now;
     remaining_seconds = Math.max(Math.floor(remainingMs / 1000), 0);
   }
 

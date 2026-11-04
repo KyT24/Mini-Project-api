@@ -39,7 +39,8 @@ class DoctorController {
     }
     static uploadPhoto(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            const photo = yield doctor_service_1.DoctorService.uploadPhoto(req.file);
+            var _a, _b;
+            const photo = yield doctor_service_1.DoctorService.uploadPhoto(req.file, ((_a = req.body) === null || _a === void 0 ? void 0 : _a.image_base64) || ((_b = req.body) === null || _b === void 0 ? void 0 : _b.photo_base64));
             res.status(201).json({
                 success: true,
                 message: 'photo uploaded successfully',

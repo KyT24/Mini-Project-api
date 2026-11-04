@@ -604,37 +604,42 @@ export class AppointmentService {
       throw new AppError(409, 'Payment proof has already been uploaded');
     }
 
-    let imageUrl: string;
-    const pathPrefix = `${appointment.id}/${Date.now()}`;
-
-    if (file) {
-      const extension = file.mimetype.split('/')[1] || 'jpg';
-      imageUrl = await Storage.upload(`${pathPrefix}.${extension}`, file);
-    } else {
-      imageUrl = await Storage.uploadBase64(`${pathPrefix}.jpg`, imageBase64!);
+    let proofPath: string;
+    let userClient: any;
+    try {
+      userClient = await getSupabaseUserClient(userId);
+    } catch {
+      // fallback to default client if token unavailable
     }
 
-    // 1. Coba update via Supabase PostgREST terlebih dahulu
+    if (file) {
+      const bucket = Storage.getPaymentProofsBucket();
+      const extension = file.mimetype.split('/')[1] || 'jpg';
+      const filePath = `${userId}/${appointment.id}-${Date.now()}.${extension}`;
+      proofPath = await Storage.upload(filePath, file, bucket, userClient);
+    } else if (imageBase64) {
+      proofPath = imageBase64;
+    } else {
+      throw new AppError(422, 'Payment proof image is required');
+    }
+
+    // 1. Eksekusi via Supabase RPC submit_payment_proof (SECURITY DEFINER)
     try {
-      const supabase = getSupabaseClient();
-      const { data: updatedAppt, error } = await supabase
-        .from('appointments')
-        .update({
-          status: 'waiting_confirmation',
-          payment_proof_path: imageUrl,
-          payment_uploaded_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', appointment.id)
-        .eq('status', 'waiting_payment')
-        .gt('payment_deadline', new Date().toISOString())
-        .select()
-        .maybeSingle();
+      const client = userClient || (await getSupabaseUserClient(userId));
+      const { data: updatedAppt, error } = await client.rpc('submit_payment_proof', {
+        p_appointment_id: appointment.id,
+        p_path: proofPath,
+      });
 
       if (!error && updatedAppt) {
         return this.getOwnById(userId, { params });
       }
-    } catch {
+
+      if (error && error.message) {
+        throw new AppError(400, error.message);
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
       // Prisma fallback
     }
 
@@ -648,7 +653,7 @@ export class AppointmentService {
         },
         data: {
           status: 'waiting_confirmation',
-          payment_proof_path: imageUrl,
+          payment_proof_path: proofPath,
           payment_uploaded_at: new Date(),
         },
       });
@@ -670,19 +675,19 @@ export class AppointmentService {
     }
 
     try {
-      const supabase = getSupabaseClient();
-      await supabase
-        .from('appointments')
-        .update({
-          status: 'canceled',
-          queue_number: null,
-          qr_token: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', appointment.id)
-        .eq('patient_id', userId);
-    } catch {
-      // Continue
+      const client = await getSupabaseUserClient(userId);
+      const { data, error } = await client.rpc('cancel_appointment', {
+        p_appointment_id: appointment.id,
+      });
+      if (!error && data) {
+        return this.getOwnById(userId, { params });
+      }
+      if (error && error.message) {
+        throw new AppError(409, error.message);
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
+      // Continue to Prisma fallback
     }
 
     try {
@@ -721,18 +726,20 @@ export class AppointmentService {
     }
 
     try {
-      const supabase = getSupabaseClient();
-      const { error: rateErr } = await supabase.from('ratings').insert({
-        appointment_id: appointment.id,
-        patient_id: appointment.patient_id,
-        doctor_id: appointment.doctor_id,
-        rating: body.rating,
-        review: body.review ?? null,
+      const client = await getSupabaseUserClient(userId);
+      const { data, error: rateErr } = await client.rpc('rate_appointment', {
+        p_appointment_id: appointment.id,
+        p_rating: body.rating,
+        p_review: body.review ?? null,
       });
-      if (!rateErr) {
+      if (!rateErr && data) {
         return this.getOwnById(userId, { params });
       }
-    } catch {
+      if (rateErr && rateErr.message) {
+        throw new AppError(409, rateErr.message);
+      }
+    } catch (e) {
+      if (e instanceof AppError) throw e;
       // Prisma fallback
     }
 

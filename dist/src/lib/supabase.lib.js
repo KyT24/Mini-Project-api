@@ -156,14 +156,21 @@ const getSupabaseUserClient = (userId) => __awaiter(void 0, void 0, void 0, func
 exports.getSupabaseUserClient = getSupabaseUserClient;
 const getClient = exports.getSupabaseClient;
 class Storage {
+    static getDoctorPhotosBucket() {
+        return process.env.SUPABASE_BUCKET_DOCTOR_PHOTOS || 'doctor-photos';
+    }
+    static getPaymentProofsBucket() {
+        return process.env.SUPABASE_BUCKET_PAYMENT_PROOFS || 'payment-proofs';
+    }
     // Unggah buffer lalu kembalikan URL publiknya
-    static uploadBuffer(path, buffer, contentType) {
+    static uploadBuffer(path, buffer, contentType, bucketName, client) {
         return __awaiter(this, void 0, void 0, function* () {
-            const bucket = process.env.SUPABASE_BUCKET || 'payment-proofs';
-            const storage = getClient().storage.from(bucket);
+            const bucket = bucketName || this.getDoctorPhotosBucket();
+            const supabase = client || getClient();
+            const storage = supabase.storage.from(bucket);
             const { error } = yield storage.upload(path, buffer, {
                 contentType,
-                upsert: false,
+                upsert: true,
             });
             if (error)
                 throw new app_error_1.AppError(502, `failed to upload file: ${error.message}`);
@@ -171,13 +178,13 @@ class Storage {
         });
     }
     // Unggah file (Multer)
-    static upload(path, file) {
+    static upload(path, file, bucketName, client) {
         return __awaiter(this, void 0, void 0, function* () {
-            return this.uploadBuffer(path, file.buffer, file.mimetype);
+            return this.uploadBuffer(path, file.buffer, file.mimetype, bucketName, client);
         });
     }
     // Unggah string Base64 Data URL
-    static uploadBase64(path, base64String) {
+    static uploadBase64(path, base64String, bucketName, client) {
         return __awaiter(this, void 0, void 0, function* () {
             const matches = base64String.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
             if (!matches || matches.length !== 3) {
@@ -185,7 +192,7 @@ class Storage {
             }
             const contentType = matches[1];
             const buffer = Buffer.from(matches[2], 'base64');
-            return this.uploadBuffer(path, buffer, contentType);
+            return this.uploadBuffer(path, buffer, contentType, bucketName, client);
         });
     }
 }

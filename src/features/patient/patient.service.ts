@@ -1,6 +1,6 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
-import { getSupabaseClient } from '../../lib/supabase.lib';
+import { getSupabaseClient, getSupabaseUserClient } from '../../lib/supabase.lib';
 import { updatePatientMeRequest } from '../../validators/patient.validator';
 
 export class PatientService {
@@ -102,7 +102,7 @@ export class PatientService {
     if (address !== undefined) updatePayload.address = address;
 
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient(userId);
       await supabase.from('profiles').update(updatePayload).eq('id', userId);
     } catch {
       // Continue to Prisma fallback

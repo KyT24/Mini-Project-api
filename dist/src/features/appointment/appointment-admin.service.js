@@ -294,55 +294,17 @@ class AppointmentAdminService {
     // Approve: beri nomor antrean berikutnya di sesi + token QR unik
     static approve(adminId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (adminId, { params }) {
-            var _b, _c, _d;
             yield (0, appointment_helpers_1.syncStatuses)();
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                const { data: appt } = yield supabase
-                    .from('appointments')
-                    .select('*')
-                    .eq('id', params.id)
-                    .single();
-                if (appt) {
-                    if (appt.status !== 'waiting_confirmation') {
-                        throw new app_error_1.AppError(409, `Appointment is ${appt.status}, cannot be approved`);
-                    }
-                    const { data: maxQ } = yield supabase
-                        .from('appointments')
-                        .select('queue_number')
-                        .eq('session_id', appt.session_id)
-                        .order('queue_number', { ascending: false })
-                        .limit(1);
-                    const nextQueueNumber = ((maxQ && ((_b = maxQ[0]) === null || _b === void 0 ? void 0 : _b.queue_number)) || 0) + 1;
-                    const qrToken = (0, crypto_1.randomUUID)();
-                    const { data: updated, error } = yield supabase
-                        .from('appointments')
-                        .update({
-                        status: 'done',
-                        confirmed_at: new Date().toISOString(),
-                        queue_number: nextQueueNumber,
-                        qr_token: qrToken,
-                        updated_at: new Date().toISOString(),
-                    })
-                        .eq('id', params.id)
-                        .select(`
-            *,
-            profiles:patient_id(id, full_name, phone_number, role, avatar_url),
-            doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
-            practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
-            ratings(id, rating, review)
-          `)
-                        .single();
-                    if (!error && updated) {
-                        return Object.assign(Object.assign({}, updated), { patient_profiles: {
-                                id: updated.patient_id,
-                                users: {
-                                    full_name: ((_c = updated.profiles) === null || _c === void 0 ? void 0 : _c.full_name) || 'Pasien',
-                                    email: '',
-                                    phone_number: ((_d = updated.profiles) === null || _d === void 0 ? void 0 : _d.phone_number) || null,
-                                },
-                            } });
-                    }
+                const { data: updated, error } = yield supabase.rpc('approve_appointment', {
+                    p_appointment_id: params.id,
+                });
+                if (!error && updated) {
+                    return yield this.findOrFail(params.id);
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(409, error.message);
                 }
             }
             catch (e) {
@@ -392,36 +354,18 @@ class AppointmentAdminService {
     // Reject: kuota otomatis kembali karena rejected tidak dihitung holdsQuota
     static reject(adminId_1, _a) {
         return __awaiter(this, arguments, void 0, function* (adminId, { params, body }) {
-            var _b, _c;
             yield (0, appointment_helpers_1.syncStatuses)();
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
-                const { data: updated, error } = yield supabase
-                    .from('appointments')
-                    .update({
-                    status: 'rejected',
-                    rejection_reason: body.reason,
-                    updated_at: new Date().toISOString(),
-                })
-                    .eq('id', params.id)
-                    .eq('status', 'waiting_confirmation')
-                    .select(`
-          *,
-          profiles:patient_id(id, full_name, phone_number, role, avatar_url),
-          doctors:doctor_id(id, full_name, photo_url, consultation_fee, specialists:specialist_id(name)),
-          practice_sessions:session_id(id, session_date, start_time, end_time, current_queue_number),
-          ratings(id, rating, review)
-        `)
-                    .single();
+                const { data: updated, error } = yield supabase.rpc('reject_appointment', {
+                    p_appointment_id: params.id,
+                    p_reason: body.reason || 'Ditolak admin',
+                });
                 if (!error && updated) {
-                    return Object.assign(Object.assign({}, updated), { patient_profiles: {
-                            id: updated.patient_id,
-                            users: {
-                                full_name: ((_b = updated.profiles) === null || _b === void 0 ? void 0 : _b.full_name) || 'Pasien',
-                                email: '',
-                                phone_number: ((_c = updated.profiles) === null || _c === void 0 ? void 0 : _c.phone_number) || null,
-                            },
-                        } });
+                    return yield this.findOrFail(params.id);
+                }
+                if (error && error.message) {
+                    throw new app_error_1.AppError(409, error.message);
                 }
             }
             catch (e) {

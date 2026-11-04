@@ -64,7 +64,10 @@ class QueueService {
             }
             // Validasi tanggal praktik adalah HARI INI (WIB)
             const todayWib = (0, appointment_helpers_1.clinicNow)().date;
-            const sessionDateStr = appointment.practice_sessions.session_date.toISOString().slice(0, 10);
+            const sessionDateVal = appointment.practice_sessions.session_date;
+            const sessionDateStr = typeof sessionDateVal === 'string'
+                ? sessionDateVal.slice(0, 10)
+                : sessionDateVal.toISOString().slice(0, 10);
             if (sessionDateStr !== todayWib) {
                 throw new app_error_1.AppError(422, `Check-in hanya dapat dilakukan pada tanggal jadwal praktik (${sessionDateStr}). Tanggal klinik hari ini: ${todayWib}.`);
             }
