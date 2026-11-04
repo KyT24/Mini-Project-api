@@ -29,6 +29,7 @@ Built with **Node.js**, **Express 5**, **TypeScript**, **Prisma ORM 7 (PostgreSQ
   - [Patient Profile (`/api/v1/patients`)](#patient-profile-apiv1patients)
   - [Appointments - Patient (`/api/v1/appointments`)](#appointments---patient-apiv1appointments)
   - [Appointments - Admin (`/api/v1/admin/appointments`)](#appointments---admin-apiv1adminappointments)
+- [Integration Roadmap with Frontend Platform](#integration-roadmap-with-frontend-platform)
 - [Deployment](#deployment)
 - [License](#license)
 
@@ -407,6 +408,30 @@ Manages weekly recurring practice hours for doctors.
   "reason": "Proof of payment unreadable / incorrect transfer amount."
 }
 ```
+
+---
+
+## 🗺️ Integration Roadmap with Frontend Platform
+
+A detailed technical gap analysis and synchronization plan has been established to connect this API with the Next.js 16 frontend (`/clinic-appointment-platform`) using a **single unified PostgreSQL (Supabase) database**.
+
+> 📖 **Full Specification:** See [`plans/01-plan-frontend-integration-20261104.md`](file:///Users/oktaviardi/Okta/api-clinic-appointment/plans/01-plan-frontend-integration-20261104.md)
+
+### Upcoming Harmonization & Endpoints:
+1. **Database Schema Harmonization**:
+   - Align Prisma models with the active Supabase schema (`profiles`, `doctors` without mandatory `user_id`, `practice_sessions` with direct `current_queue_number`).
+   - Unified `appointments` table tracking `code`, `payment_proof_path`, `confirmed_at`, `checked_in_at`, and `is_no_show`.
+2. **On-Site QR Check-in Pipeline (`/api/v1/admin/queue/check-in`)**:
+   - Clinic staff scans patient QR code on appointment day.
+   - Validates session date matches today (WIB) and assigns sequential arrival `queue_number` (`MAX + 1`).
+3. **Live Queue & TV Display (`/api/v1/queue/live`)**:
+   - Feeds real-time waiting room TV displays (`/queue`) with current serving number and upcoming numbers.
+4. **Queue Calling & No-Show Controls**:
+   - `PATCH /api/v1/admin/queue/call-next`: Advance queue to next waiting patient.
+   - `PATCH /api/v1/admin/appointments/:id/no-show`: Mark unarrived patients as no-show.
+5. **Admin Dashboard Metrics & Statistics**:
+   - `GET /api/v1/admin/dashboard/metrics`: Daily operational overview.
+   - `GET /api/v1/admin/dashboard/stats`: Aggregated charting endpoints (day/month/year) for Recharts visualizer.
 
 ---
 

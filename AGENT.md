@@ -201,3 +201,16 @@ When implementing a new feature or endpoint, follow this strict checklist:
 6. [ ] **Doc Update:** Update `README.md` if endpoint contracts change.
 7. [ ] **Clean Code & Comments:** Preserve existing comments and docstrings. Do not leave temporary debugging code.
 
+---
+
+## 8. Multi-App Integration & Shared Database Directives
+
+When implementing tasks outlined in [`plans/01-plan-frontend-integration-20261104.md`](file:///Users/oktaviardi/Okta/api-clinic-appointment/plans/01-plan-frontend-integration-20261104.md):
+
+1. **Shared Database Awareness**: The PostgreSQL database is shared with Next.js frontend (`/clinic-appointment-platform`). Do not delete or rename existing Supabase database columns or types (`public.profiles`, `public.doctors.photo_url`, `public.practice_sessions.current_queue_number`, `public.appointments.payment_proof_path`, `is_no_show`).
+2. **Approval vs Check-in Invariant**:
+   - `PATCH /admin/appointments/:id/approve` ONLY verifies payment, transitions status to `done`, and produces `qr_token`.
+   - **Queue Number** is assigned during on-site physical check-in (`POST /admin/queue/check-in` or check-in flow) on the day of the appointment (`checked_in_at = now()`, `queue_number = MAX + 1`).
+3. **Payload Flexibility**: Accept both multipart files and compressed Base64 Data URL strings (`data:image/jpeg;base64,...`) for payment slip uploads.
+4. **Plan Execution Discipline**: Always document new plans in `plans/[nn]-plan-[context]-[date].md` before executing multi-phase features.
+

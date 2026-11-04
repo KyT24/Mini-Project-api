@@ -31,6 +31,7 @@
 7. [Timezone Normalization Strategy (WIB / UTC)](#7-timezone-normalization-strategy-wib--utc)
 8. [Error Handling & API Envelope Standards](#8-error-handling--api-envelope-standards)
 9. [Deployment & Infrastructure Topology](#9-deployment--infrastructure-topology)
+10. [Unified Database Architecture & Frontend Integration](#10-unified-database-architecture--frontend-integration)
 
 ---
 
@@ -408,4 +409,42 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
 
 - **Build Output**: Compiles via `tsc` to `./dist`.
 - **Database Pooling**: Uses Supabase transaction pooler for API queries (`DATABASE_URL`) and direct connection (`DIRECT_URL`) for running migrations (`prisma migrate`).
+
+---
+
+## 10. Unified Database Architecture & Frontend Integration
+
+For full technical specifications on aligning the backend API with the Next.js 16 frontend platform (`clinic-appointment-platform`), refer to:
+> 📄 **Integration Blueprint:** [`plans/01-plan-frontend-integration-20261104.md`](file:///Users/oktaviardi/Okta/api-clinic-appointment/plans/01-plan-frontend-integration-20261104.md)
+
+### Database Harmonization Matrix
+
+```
+                      ┌──────────────────────────────────────────────┐
+                      │    PostgreSQL Database (Supabase Cloud)      │
+                      └──────────────────────┬───────────────────────┘
+                                             │
+                       ┌─────────────────────┴─────────────────────┐
+                       ▼                                           ▼
+      ┌─────────────────────────────────┐         ┌─────────────────────────────────┐
+      │  Express API (api-clinic-app)   │         │ Next.js (clinic-appointment)    │
+      │  - Prisma 7 (pg Pooler adapter) │         │ - @supabase/ssr & axiosInstance │
+      │  - Business logic & atomic lock │         │ - TanStack Query v5 UI hooks    │
+      └─────────────────────────────────┘         └─────────────────────────────────┘
+```
+
+1. **Shared User Schema**:
+   - Both apps interface with `public.profiles` (`id` references `auth.users`).
+   - Unified role handling (`patient` / `admin`).
+2. **Decoupled Doctor Master**:
+   - `doctors` table maintains clinical details (`full_name`, `consultation_fee`, `bio`, `photo_url`, `specialist_id`) without requiring a separate user login account.
+3. **Queue & Session Unification**:
+   - `practice_sessions` directly contains `current_queue_number`, `starts_at`, `ends_at`, and `schedule_id`.
+   - Dynamic real-time listening (`/queue` display) synchronizes with `practice_sessions.current_queue_number`.
+4. **On-Site QR Check-in Protocol**:
+   - Approval generates `qr_token`.
+   - Physical arrival check-in validates `session_date == today(WIB)` and sets `checked_in_at = now()`, computing `queue_number = MAX(queue_number) + 1`.
+5. **Dashboard Analytics Pipeline**:
+   - Unified queries for metric summary cards and Recharts time-series aggregations (`day`, `month`, `year`).
+
 
