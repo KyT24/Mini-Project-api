@@ -24,8 +24,10 @@ async function getOrFetchAdminToken(): Promise<string> {
         if (!url || !anonKey) return '';
 
         const authClient = createClient(url, anonKey, { auth: { persistSession: false } });
-        const email = process.env.ADMIN_SEED_EMAIL || 'admin@klinik.test';
-        const password = process.env.ADMIN_SEED_PASSWORD || 'Admin123!';
+        const email =
+          process.env.ADMIN_EMAIL || process.env.ADMIN_SEED_EMAIL || 'admin@klinik.test';
+        const password =
+          process.env.ADMIN_PASSWORD || process.env.ADMIN_SEED_PASSWORD || 'Admin123!';
 
         const { data, error } = await authClient.auth.signInWithPassword({
           email,
@@ -36,6 +38,10 @@ async function getOrFetchAdminToken(): Promise<string> {
           cachedAdminToken = data.session.access_token;
           tokenExpiresAt = Date.now() + (data.session.expires_in || 3600) * 1000;
           return cachedAdminToken;
+        }
+
+        if (error) {
+          console.error('Supabase admin signInWithPassword failed:', error.message);
         }
       } catch (e) {
         console.error('Failed to authenticate Supabase admin session for backend queries:', e);
@@ -78,14 +84,18 @@ export const getSupabaseClient = (): SupabaseClient => {
   // Jika hanya memiliki anon/publishable key, attach bearer token admin agar RLS mengizinkan query
   const keyToUse = serviceKey || anonKey!;
   const customFetch: typeof fetch = async (input, init) => {
-    const token = await getOrFetchAdminToken();
-    if (token) {
-      const headers = new Headers(init?.headers);
-      // Pasang authorization bearer admin jika belum ditentukan secara spesifik
-      if (!headers.has('Authorization') || headers.get('Authorization')?.includes(keyToUse)) {
-        headers.set('Authorization', `Bearer ${token}`);
+    try {
+      const token = await getOrFetchAdminToken();
+      if (token) {
+        const headers = new Headers(init?.headers);
+        // Selalu pasang authorization bearer admin jika belum ditentukan atau masih menggunakan publishable key
+        if (!headers.has('Authorization') || headers.get('Authorization')?.includes(keyToUse)) {
+          headers.set('Authorization', `Bearer ${token}`);
+        }
+        return fetch(input, { ...init, headers });
       }
-      return fetch(input, { ...init, headers });
+    } catch (fetchErr) {
+      console.warn('customFetch token attachment warning:', fetchErr);
     }
     return fetch(input, init);
   };
@@ -111,6 +121,15 @@ export async function getUserToken(userId: string): Promise<string> {
   const cached = userTokenCache.get(userId);
   if (cached && cached.expiresAt > Date.now() + 60000) {
     return cached.token;
+  }
+
+  // Jika admin utama / ID admin
+  if (userId === 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa') {
+    const adminToken = await getOrFetchAdminToken();
+    if (adminToken) {
+      cacheUserToken(userId, adminToken, 3600);
+      return adminToken;
+    }
   }
 
   // Jika pasien demo

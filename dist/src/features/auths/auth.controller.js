@@ -75,5 +75,17 @@ class AuthsController {
             });
         });
     }
+    static changePassword(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { body } = (0, validate_1.validate)(auth_validator_1.changePasswordSchema, { body: req.body });
+            const auth = res.locals.auth;
+            yield auth_service_1.AuthsService.changePassword(auth.id, body, auth);
+            res.status(200).json({
+                success: true,
+                message: 'Password berhasil diperbarui',
+                data: {},
+            });
+        });
+    }
 }
 exports.AuthsController = AuthsController;

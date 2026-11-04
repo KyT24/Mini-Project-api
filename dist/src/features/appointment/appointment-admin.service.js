@@ -296,7 +296,7 @@ class AppointmentAdminService {
         return __awaiter(this, arguments, void 0, function* (adminId, { params }) {
             yield (0, appointment_helpers_1.syncStatuses)();
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)(adminId);
                 const { data: updated, error } = yield supabase.rpc('approve_appointment', {
                     p_appointment_id: params.id,
                 });
@@ -356,7 +356,7 @@ class AppointmentAdminService {
         return __awaiter(this, arguments, void 0, function* (adminId, { params, body }) {
             yield (0, appointment_helpers_1.syncStatuses)();
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)(adminId);
                 const { data: updated, error } = yield supabase.rpc('reject_appointment', {
                     p_appointment_id: params.id,
                     p_reason: body.reason || 'Ditolak admin',

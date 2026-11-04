@@ -26,7 +26,7 @@ class QueueService {
                 token = (parts[1] || parts[0]).trim();
             }
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
                 const { data, error } = yield supabase.rpc('check_in', { p_qr_token: token });
                 if (!error && data) {
                     return data;
@@ -202,7 +202,7 @@ class QueueService {
         return __awaiter(this, void 0, void 0, function* () {
             var _a, _b, _c;
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
                 const { data, error } = yield supabase.rpc('call_next', { p_session_id: sessionId });
                 if (!error && data) {
                     return data;
@@ -298,7 +298,7 @@ class QueueService {
     static markNoShow(appointmentId) {
         return __awaiter(this, void 0, void 0, function* () {
             try {
-                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const supabase = yield (0, supabase_lib_1.getSupabaseUserClient)('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
                 const { data, error } = yield supabase.rpc('mark_no_show', { p_appointment_id: appointmentId });
                 if (!error && data) {
                     return data;

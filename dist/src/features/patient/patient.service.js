@@ -14,8 +14,40 @@ const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
 const supabase_lib_1 = require("../../lib/supabase.lib");
 class PatientService {
-    static findPatientOrFail(userId) {
+    static resolveEmail(userId, knownEmail) {
         return __awaiter(this, void 0, void 0, function* () {
+            if (knownEmail && knownEmail.trim())
+                return knownEmail.trim();
+            try {
+                const user = yield prisma_client_config_1.prisma.user.findUnique({
+                    where: { id: userId },
+                    select: { email: true },
+                });
+                if (user === null || user === void 0 ? void 0 : user.email)
+                    return user.email;
+            }
+            catch (_a) {
+                // Prisma fallback ignore
+            }
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data } = yield supabase
+                    .from('users')
+                    .select('email')
+                    .eq('id', userId)
+                    .maybeSingle();
+                if (data === null || data === void 0 ? void 0 : data.email)
+                    return data.email;
+            }
+            catch (_b) {
+                // Supabase ignore
+            }
+            return '';
+        });
+    }
+    static findPatientOrFail(userId, knownEmail) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const email = yield this.resolveEmail(userId, knownEmail);
             try {
                 const supabase = (0, supabase_lib_1.getSupabaseClient)();
                 const { data, error } = yield supabase
@@ -26,7 +58,7 @@ class PatientService {
                 if (!error && data) {
                     return {
                         id: data.id,
-                        email: '',
+                        email,
                         full_name: data.full_name,
                         phone_number: data.phone_number,
                         role: data.role ? data.role.toUpperCase() : 'PATIENT',
@@ -54,7 +86,7 @@ class PatientService {
                 if (profile) {
                     return {
                         id: profile.id,
-                        email: '',
+                        email,
                         full_name: profile.full_name,
                         phone_number: profile.phone_number,
                         role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
@@ -93,9 +125,9 @@ class PatientService {
             throw new app_error_1.AppError(404, 'patient not found');
         });
     }
-    static getMe(userId) {
+    static getMe(userId, knownEmail) {
         return __awaiter(this, void 0, void 0, function* () {
-            return yield this.findPatientOrFail(userId);
+            return yield this.findPatientOrFail(userId, knownEmail);
         });
     }
     static updateMe(userId_1, _a) {

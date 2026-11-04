@@ -5,7 +5,8 @@ import { PatientService } from './patient.service';
 
 export class PatientController {
   static async getMe(req: Request, res: Response) {
-    const patient = await PatientService.getMe(res.locals.auth.id);
+    const auth = res.locals.auth;
+    const patient = await PatientService.getMe(auth.id, auth.email);
 
     res.status(200).json({
       success: true,

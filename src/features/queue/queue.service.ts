@@ -1,7 +1,7 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { toDbDate } from '../../lib/time.lib';
-import { getSupabaseClient } from '../../lib/supabase.lib';
+import { getSupabaseClient, getSupabaseUserClient } from '../../lib/supabase.lib';
 import { clinicNow, lockSession } from '../appointment/appointment.helpers';
 
 export class QueueService {
@@ -14,7 +14,7 @@ export class QueueService {
     }
 
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
       const { data, error } = await supabase.rpc('check_in', { p_qr_token: token });
       if (!error && data) {
         return data;
@@ -204,7 +204,7 @@ export class QueueService {
   // Panggil antrean berikutnya (Call Next)
   static async callNext(sessionId: string) {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
       const { data, error } = await supabase.rpc('call_next', { p_session_id: sessionId });
       if (!error && data) {
         return data;
@@ -305,7 +305,7 @@ export class QueueService {
   // Tandai pasien tidak hadir (No-Show)
   static async markNoShow(appointmentId: string) {
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient('aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa');
       const { data, error } = await supabase.rpc('mark_no_show', { p_appointment_id: appointmentId });
       if (!error && data) {
         return data;

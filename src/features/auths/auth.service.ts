@@ -1,5 +1,6 @@
 import 'dotenv/config';
 
+import { createClient } from '@supabase/supabase-js';
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Jwt } from '../../lib/jwt.lib';
@@ -8,6 +9,7 @@ import { getSupabaseClient, cacheUserToken } from '../../lib/supabase.lib';
 import {
   userRegisterRequest,
   userLoginRequest,
+  changePasswordRequest,
 } from '../../validators/auth.validator';
 
 export class AuthsService {
@@ -221,5 +223,113 @@ export class AuthsService {
     }
 
     throw new AppError(401, 'Unauthorized');
+  }
+
+  static async changePassword(
+    userId: string,
+    body: changePasswordRequest['body'],
+    authPayload?: any,
+  ) {
+    const { current_password, new_password } = body;
+
+    // 1. Cari email pengguna
+    let email = authPayload?.email;
+    let localUser: any = null;
+
+    try {
+      localUser = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+      if (localUser?.email) email = localUser.email;
+    } catch {
+      // Ignore Prisma error
+    }
+
+    if (!email) {
+      try {
+        const supabase = getSupabaseClient();
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('email')
+          .eq('id', userId)
+          .maybeSingle();
+        if (prof?.email) email = prof.email;
+      } catch {
+        // Ignore Supabase error
+      }
+    }
+
+    let isPasswordVerified = false;
+
+    // 2. Verifikasi password saat ini via Prisma jika ada
+    if (localUser && localUser.password) {
+      const isMatch = await Bcrypt.comparePassword(current_password, localUser.password);
+      if (isMatch) isPasswordVerified = true;
+    }
+
+    // 3. Verifikasi & update di Supabase Auth jika email tersedia
+    const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey =
+      process.env.SUPABASE_ANON_KEY ||
+      process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_KEY;
+
+    if (url && anonKey && email) {
+      try {
+        const authClient = createClient(url, anonKey, { auth: { persistSession: false } });
+        const { data: signInData, error: signInErr } = await authClient.auth.signInWithPassword({
+          email,
+          password: current_password,
+        });
+
+        if (!signInErr && signInData?.session?.access_token) {
+          isPasswordVerified = true;
+          // Update password di Supabase Auth menggunakan session token yang terverifikasi
+          const userClient = createClient(url, anonKey, {
+            auth: { persistSession: false },
+            global: {
+              headers: {
+                Authorization: `Bearer ${signInData.session.access_token}`,
+              },
+            },
+          });
+          const { error: updateErr } = await userClient.auth.updateUser({
+            password: new_password,
+          });
+          if (updateErr) {
+            console.warn('Supabase updateUser password warning:', updateErr.message);
+          } else if (signInData.user?.id) {
+            cacheUserToken(signInData.user.id, signInData.session.access_token, 3600);
+          }
+        }
+      } catch (authErr) {
+        console.warn('Supabase auth verify current password error:', authErr);
+      }
+    }
+
+    if (!isPasswordVerified) {
+      throw new AppError(400, 'Password saat ini tidak sesuai');
+    }
+
+    // 4. Update password di database lokal / Prisma
+    const hashedNewPassword = await Bcrypt.hashPassword(new_password);
+
+    if (localUser) {
+      await prisma.user.update({
+        where: { id: localUser.id },
+        data: { password: hashedNewPassword },
+      });
+    } else if (email) {
+      try {
+        await prisma.user.updateMany({
+          where: { email },
+          data: { password: hashedNewPassword },
+        });
+      } catch {
+        // Ignore
+      }
+    }
+
+    return true;
   }
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
-import { getSupabaseClient } from '../../lib/supabase.lib';
+import { getSupabaseClient, getSupabaseUserClient } from '../../lib/supabase.lib';
 import { toDbDate } from '../../lib/time.lib';
 import {
   appointmentIdRequest,
@@ -326,7 +326,7 @@ export class AppointmentAdminService {
     await syncStatuses();
 
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient(adminId);
       const { data: updated, error } = await supabase.rpc('approve_appointment', {
         p_appointment_id: params.id,
       });
@@ -395,7 +395,7 @@ export class AppointmentAdminService {
     await syncStatuses();
 
     try {
-      const supabase = getSupabaseClient();
+      const supabase = await getSupabaseUserClient(adminId);
       const { data: updated, error } = await supabase.rpc('reject_appointment', {
         p_appointment_id: params.id,
         p_reason: body.reason || 'Ditolak admin',

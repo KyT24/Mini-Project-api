@@ -35,8 +35,8 @@ function getOrFetchAdminToken() {
                     if (!url || !anonKey)
                         return '';
                     const authClient = (0, supabase_js_1.createClient)(url, anonKey, { auth: { persistSession: false } });
-                    const email = process.env.ADMIN_SEED_EMAIL || 'admin@klinik.test';
-                    const password = process.env.ADMIN_SEED_PASSWORD || 'Admin123!';
+                    const email = process.env.ADMIN_EMAIL || process.env.ADMIN_SEED_EMAIL || 'admin@klinik.test';
+                    const password = process.env.ADMIN_PASSWORD || process.env.ADMIN_SEED_PASSWORD || 'Admin123!';
                     const { data, error } = yield authClient.auth.signInWithPassword({
                         email,
                         password,
@@ -45,6 +45,9 @@ function getOrFetchAdminToken() {
                         cachedAdminToken = data.session.access_token;
                         tokenExpiresAt = Date.now() + (data.session.expires_in || 3600) * 1000;
                         return cachedAdminToken;
+                    }
+                    if (error) {
+                        console.error('Supabase admin signInWithPassword failed:', error.message);
                     }
                 }
                 catch (e) {
@@ -84,14 +87,19 @@ const getSupabaseClient = () => {
     const keyToUse = serviceKey || anonKey;
     const customFetch = (input, init) => __awaiter(void 0, void 0, void 0, function* () {
         var _a;
-        const token = yield getOrFetchAdminToken();
-        if (token) {
-            const headers = new Headers(init === null || init === void 0 ? void 0 : init.headers);
-            // Pasang authorization bearer admin jika belum ditentukan secara spesifik
-            if (!headers.has('Authorization') || ((_a = headers.get('Authorization')) === null || _a === void 0 ? void 0 : _a.includes(keyToUse))) {
-                headers.set('Authorization', `Bearer ${token}`);
+        try {
+            const token = yield getOrFetchAdminToken();
+            if (token) {
+                const headers = new Headers(init === null || init === void 0 ? void 0 : init.headers);
+                // Selalu pasang authorization bearer admin jika belum ditentukan atau masih menggunakan publishable key
+                if (!headers.has('Authorization') || ((_a = headers.get('Authorization')) === null || _a === void 0 ? void 0 : _a.includes(keyToUse))) {
+                    headers.set('Authorization', `Bearer ${token}`);
+                }
+                return fetch(input, Object.assign(Object.assign({}, init), { headers }));
             }
-            return fetch(input, Object.assign(Object.assign({}, init), { headers }));
+        }
+        catch (fetchErr) {
+            console.warn('customFetch token attachment warning:', fetchErr);
         }
         return fetch(input, init);
     });
@@ -115,6 +123,14 @@ function getUserToken(userId) {
         const cached = userTokenCache.get(userId);
         if (cached && cached.expiresAt > Date.now() + 60000) {
             return cached.token;
+        }
+        // Jika admin utama / ID admin
+        if (userId === 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa') {
+            const adminToken = yield getOrFetchAdminToken();
+            if (adminToken) {
+                cacheUserToken(userId, adminToken, 3600);
+                return adminToken;
+            }
         }
         // Jika pasien demo
         if (userId === 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb') {

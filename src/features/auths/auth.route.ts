@@ -13,4 +13,5 @@ AuthRouter.post(
 );
 AuthRouter.post('/login', AuthsController.login);
 AuthRouter.get('/me', verifyToken, AuthsController.me);
+AuthRouter.patch('/password', verifyToken, AuthsController.changePassword);
 AuthRouter.post('/logout', AuthsController.logout);

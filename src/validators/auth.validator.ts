@@ -37,3 +37,15 @@ export const userLoginSchema = z.object({
 });
 
 export type userLoginRequest = z.infer<typeof userLoginSchema>;
+
+export const changePasswordSchema = z.object({
+  body: z.object({
+    current_password: z.string().min(1, 'Password saat ini wajib diisi'),
+    new_password: z
+      .string()
+      .min(8, 'Password baru minimal 8 karakter')
+      .max(72, 'Password memiliki maksimal 72 karakter'),
+  }),
+});
+
+export type changePasswordRequest = z.infer<typeof changePasswordSchema>;

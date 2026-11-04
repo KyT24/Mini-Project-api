@@ -22,6 +22,7 @@ var __rest = (this && this.__rest) || function (s, e) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AuthsService = void 0;
 require("dotenv/config");
+const supabase_js_1 = require("@supabase/supabase-js");
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
 const jwt_lib_1 = require("../../lib/jwt.lib");
@@ -214,6 +215,108 @@ class AuthsService {
                 };
             }
             throw new app_error_1.AppError(401, 'Unauthorized');
+        });
+    }
+    static changePassword(userId, body, authPayload) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a, _b;
+            const { current_password, new_password } = body;
+            // 1. Cari email pengguna
+            let email = authPayload === null || authPayload === void 0 ? void 0 : authPayload.email;
+            let localUser = null;
+            try {
+                localUser = yield prisma_client_config_1.prisma.user.findUnique({
+                    where: { id: userId },
+                });
+                if (localUser === null || localUser === void 0 ? void 0 : localUser.email)
+                    email = localUser.email;
+            }
+            catch (_c) {
+                // Ignore Prisma error
+            }
+            if (!email) {
+                try {
+                    const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                    const { data: prof } = yield supabase
+                        .from('profiles')
+                        .select('email')
+                        .eq('id', userId)
+                        .maybeSingle();
+                    if (prof === null || prof === void 0 ? void 0 : prof.email)
+                        email = prof.email;
+                }
+                catch (_d) {
+                    // Ignore Supabase error
+                }
+            }
+            let isPasswordVerified = false;
+            // 2. Verifikasi password saat ini via Prisma jika ada
+            if (localUser && localUser.password) {
+                const isMatch = yield bcrypt_lib_1.Bcrypt.comparePassword(current_password, localUser.password);
+                if (isMatch)
+                    isPasswordVerified = true;
+            }
+            // 3. Verifikasi & update di Supabase Auth jika email tersedia
+            const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+            const anonKey = process.env.SUPABASE_ANON_KEY ||
+                process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+                process.env.SUPABASE_KEY;
+            if (url && anonKey && email) {
+                try {
+                    const authClient = (0, supabase_js_1.createClient)(url, anonKey, { auth: { persistSession: false } });
+                    const { data: signInData, error: signInErr } = yield authClient.auth.signInWithPassword({
+                        email,
+                        password: current_password,
+                    });
+                    if (!signInErr && ((_a = signInData === null || signInData === void 0 ? void 0 : signInData.session) === null || _a === void 0 ? void 0 : _a.access_token)) {
+                        isPasswordVerified = true;
+                        // Update password di Supabase Auth menggunakan session token yang terverifikasi
+                        const userClient = (0, supabase_js_1.createClient)(url, anonKey, {
+                            auth: { persistSession: false },
+                            global: {
+                                headers: {
+                                    Authorization: `Bearer ${signInData.session.access_token}`,
+                                },
+                            },
+                        });
+                        const { error: updateErr } = yield userClient.auth.updateUser({
+                            password: new_password,
+                        });
+                        if (updateErr) {
+                            console.warn('Supabase updateUser password warning:', updateErr.message);
+                        }
+                        else if ((_b = signInData.user) === null || _b === void 0 ? void 0 : _b.id) {
+                            (0, supabase_lib_1.cacheUserToken)(signInData.user.id, signInData.session.access_token, 3600);
+                        }
+                    }
+                }
+                catch (authErr) {
+                    console.warn('Supabase auth verify current password error:', authErr);
+                }
+            }
+            if (!isPasswordVerified) {
+                throw new app_error_1.AppError(400, 'Password saat ini tidak sesuai');
+            }
+            // 4. Update password di database lokal / Prisma
+            const hashedNewPassword = yield bcrypt_lib_1.Bcrypt.hashPassword(new_password);
+            if (localUser) {
+                yield prisma_client_config_1.prisma.user.update({
+                    where: { id: localUser.id },
+                    data: { password: hashedNewPassword },
+                });
+            }
+            else if (email) {
+                try {
+                    yield prisma_client_config_1.prisma.user.updateMany({
+                        where: { email },
+                        data: { password: hashedNewPassword },
+                    });
+                }
+                catch (_e) {
+                    // Ignore
+                }
+            }
+            return true;
         });
     }
 }

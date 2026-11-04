@@ -4,7 +4,37 @@ import { getSupabaseClient, getSupabaseUserClient } from '../../lib/supabase.lib
 import { updatePatientMeRequest } from '../../validators/patient.validator';
 
 export class PatientService {
-  private static async findPatientOrFail(userId: string) {
+  private static async resolveEmail(userId: string, knownEmail?: string): Promise<string> {
+    if (knownEmail && knownEmail.trim()) return knownEmail.trim();
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      });
+      if (user?.email) return user.email;
+    } catch {
+      // Prisma fallback ignore
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data } = await supabase
+        .from('users')
+        .select('email')
+        .eq('id', userId)
+        .maybeSingle();
+      if (data?.email) return data.email;
+    } catch {
+      // Supabase ignore
+    }
+
+    return '';
+  }
+
+  private static async findPatientOrFail(userId: string, knownEmail?: string) {
+    const email = await this.resolveEmail(userId, knownEmail);
+
     try {
       const supabase = getSupabaseClient();
       const { data, error } = await supabase
@@ -16,7 +46,7 @@ export class PatientService {
       if (!error && data) {
         return {
           id: data.id,
-          email: '',
+          email,
           full_name: data.full_name,
           phone_number: data.phone_number,
           role: data.role ? data.role.toUpperCase() : 'PATIENT',
@@ -45,7 +75,7 @@ export class PatientService {
       if (profile) {
         return {
           id: profile.id,
-          email: '',
+          email,
           full_name: profile.full_name,
           phone_number: profile.phone_number,
           role: profile.role ? profile.role.toUpperCase() : 'PATIENT',
@@ -85,8 +115,8 @@ export class PatientService {
     throw new AppError(404, 'patient not found');
   }
 
-  static async getMe(userId: string) {
-    return await this.findPatientOrFail(userId);
+  static async getMe(userId: string, knownEmail?: string) {
+    return await this.findPatientOrFail(userId, knownEmail);
   }
 
   static async updateMe(userId: string, { body }: updatePatientMeRequest) {
