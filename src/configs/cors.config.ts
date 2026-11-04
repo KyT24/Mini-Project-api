@@ -1,6 +1,5 @@
 import { CorsOptions } from "cors";
 
-
 export const corsOptions: CorsOptions = {
   // Izinkan cookie/credential dari frontend (axios withCredentials: true)
   credentials: true,
@@ -8,18 +7,33 @@ export const corsOptions: CorsOptions = {
     origin: string | undefined,
     callback: (err: Error | null, allow?: boolean) => void,
   ) {
-    const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(','); // [URL1, URL2]
+    // 1. Izinkan request tanpa origin (seperti curl, Postman, mobile app, atau server-to-server fetch dari Next.js SSR)
+    if (!origin) {
+      return callback(null, true);
+    }
 
-    /*
-      IF ORIGIN NOT INSIDE ALLOWED_ORIGIN
-    */
-    if (
-      !ALLOWED_ORIGINS?.includes(origin!) &&
-        process.env.NODE_ENV === 'PRODUCTION'
-      ) 
+    // 2. Di mode development, izinkan semua origin
+    if (process.env.NODE_ENV !== 'PRODUCTION') {
+      return callback(null, true);
+    }
 
-      return callback(new Error('Origin not allowed by CORS'), false);
+    const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+      .split(',')
+      .map((o) => o.trim().replace(/\/$/, ''))
+      .filter(Boolean);
 
-    return callback(null, true);
+    const cleanOrigin = origin.replace(/\/$/, '');
+
+    // 3. Izinkan domain yang terdaftar secara eksplisit
+    if (allowedOrigins.includes(cleanOrigin)) {
+      return callback(null, true);
+    }
+
+    // 4. Izinkan otomatis seluruh domain deployment Vercel (*.vercel.app) dan localhost
+    if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.includes('localhost')) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Origin not allowed by CORS'), false);
   },
 };
