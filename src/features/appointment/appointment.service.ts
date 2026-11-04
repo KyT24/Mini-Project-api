@@ -2,7 +2,7 @@ import { randomBytes } from 'crypto';
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
-import { Storage } from '../../lib/supabase.lib';
+import { Storage, getSupabaseClient } from '../../lib/supabase.lib';
 import { dayOfWeek, fromDbTime, toDbDate, toDbTime } from '../../lib/time.lib';
 import {
   appointmentIdRequest,
@@ -60,6 +60,31 @@ export class AppointmentService {
   static async getAvailability({ query }: getAvailabilityRequest) {
     const { doctor_id, date } = query;
     this.assertBookableDate(date);
+
+    try {
+      const supabase = getSupabaseClient();
+      const { data: rpcSlots, error: rpcErr } = await supabase.rpc('get_availability', {
+        p_doctor_id: doctor_id,
+        p_date: date,
+      });
+
+      if (!rpcErr && rpcSlots && Array.isArray(rpcSlots)) {
+        const slots = rpcSlots.map((slot: any) => ({
+          schedule_id: slot.schedule_id || slot.id,
+          start_time: (slot.start_time || '').slice(0, 5),
+          end_time: (slot.end_time || '').slice(0, 5),
+          quota: Number(slot.quota) || 0,
+          booked: Number(slot.booked) || 0,
+          remaining: Number(slot.remaining) || 0,
+          available: Boolean(slot.available),
+        }));
+
+        return { doctor_id, date, slots };
+      }
+    } catch {
+      // Lanjut ke fallback jika RPC Supabase tidak tersedia
+    }
+
     await this.findActiveDoctorOrFail(doctor_id);
     await syncStatuses();
 

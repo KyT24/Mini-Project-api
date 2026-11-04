@@ -2,6 +2,7 @@ import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
 import { fromDbTime, toDbTime } from '../../lib/time.lib';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import {
   createScheduleRequest,
   getSchedulesRequest,
@@ -64,15 +65,40 @@ export class ScheduleService {
   static async getAll({ query }: getSchedulesRequest) {
     const { doctor_id, is_active } = query;
 
-    const where: Prisma.doctor_schedulesWhereInput = { doctor_id };
-    if (is_active !== undefined) {
-      where.is_active = is_active;
-    }
+    try {
+      const supabase = getSupabaseClient();
+      let q = supabase.from('doctor_schedules').select('*');
 
-    return await prisma.doctor_schedules.findMany({
-      where,
-      orderBy: scheduleOrder,
-    });
+      if (doctor_id) q = q.eq('doctor_id', doctor_id);
+      if (is_active !== undefined) q = q.eq('is_active', is_active);
+
+      q = q.order('day_of_week', { ascending: true }).order('start_time', { ascending: true });
+
+      const { data, error } = await q;
+      if (error) throw error;
+
+      return (data || []).map((s: any) => ({
+        id: s.id,
+        doctor_id: s.doctor_id,
+        day_of_week: Number(s.day_of_week),
+        start_time: s.start_time,
+        end_time: s.end_time,
+        patient_quota: Number(s.patient_quota),
+        is_active: Boolean(s.is_active),
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+      }));
+    } catch {
+      const where: Prisma.doctor_schedulesWhereInput = { doctor_id };
+      if (is_active !== undefined) {
+        where.is_active = is_active;
+      }
+
+      return await prisma.doctor_schedules.findMany({
+        where,
+        orderBy: scheduleOrder,
+      });
+    }
   }
 
   static async create({ body }: createScheduleRequest) {

@@ -115,39 +115,127 @@ class DoctorService {
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { page, limit, search, is_active, specialist_id, min_fee, max_fee, day_of_week, sort, } = query;
-            // Filter hanya ditambahkan jika diisi dari query
-            const where = {};
-            if (is_active !== undefined) {
-                where.is_active = is_active;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase
+                    .from('doctors')
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*), ratings(*)', {
+                    count: 'exact',
+                });
+                if (is_active !== undefined)
+                    q = q.eq('is_active', is_active);
+                if (specialist_id)
+                    q = q.eq('specialist_id', specialist_id);
+                if (search)
+                    q = q.ilike('full_name', `%${search}%`);
+                if (min_fee !== undefined)
+                    q = q.gte('consultation_fee', min_fee);
+                if (max_fee !== undefined)
+                    q = q.lte('consultation_fee', max_fee);
+                if (sort === 'fee_asc')
+                    q = q.order('consultation_fee', { ascending: true });
+                else if (sort === 'fee_desc')
+                    q = q.order('consultation_fee', { ascending: false });
+                else if (sort === 'experience_desc')
+                    q = q.order('experience_years', { ascending: false });
+                else
+                    q = q.order('created_at', { ascending: false });
+                const from = (page - 1) * limit;
+                const to = from + limit - 1;
+                const { data, count, error } = yield q.range(from, to);
+                if (error)
+                    throw error;
+                let filtered = data || [];
+                if (day_of_week !== undefined) {
+                    filtered = filtered.filter((d) => {
+                        var _a;
+                        return (_a = d.doctor_schedules) === null || _a === void 0 ? void 0 : _a.some((s) => s.is_active && Number(s.day_of_week) === day_of_week);
+                    });
+                }
+                const doctors = filtered.map((d) => {
+                    const schedules = (d.doctor_schedules || [])
+                        .filter((s) => s.is_active)
+                        .map((s) => ({
+                        id: s.id,
+                        day_of_week: Number(s.day_of_week),
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        patient_quota: Number(s.patient_quota),
+                    }))
+                        .sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time));
+                    const ratings = Array.isArray(d.ratings) ? d.ratings : [];
+                    const ratingCount = ratings.length;
+                    const ratingSum = ratings.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+                    const ratingAvg = ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(1)) : null;
+                    return {
+                        id: d.id,
+                        user_id: d.id,
+                        full_name: d.full_name,
+                        bio: d.bio,
+                        experience_years: Number(d.experience_years) || 0,
+                        consultation_fee: d.consultation_fee,
+                        photo: d.photo_url || d.photo || null,
+                        photo_url: d.photo_url || d.photo || null,
+                        specialist_id: d.specialist_id,
+                        is_active: Boolean(d.is_active),
+                        created_at: d.created_at,
+                        updated_at: d.updated_at,
+                        users: {
+                            id: d.id,
+                            email: '',
+                            full_name: d.full_name,
+                            phone_number: null,
+                            profile_picture: d.photo_url || d.photo || null,
+                        },
+                        specialists: d.specialists
+                            ? { id: d.specialists.id, name: d.specialists.name }
+                            : null,
+                        doctor_schedules: schedules,
+                        rating_avg: ratingAvg,
+                        rating_count: ratingCount,
+                    };
+                });
+                const total = count || doctors.length;
+                return {
+                    doctors,
+                    meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+                };
             }
-            if (specialist_id) {
-                where.specialist_id = specialist_id;
+            catch (_b) {
+                // Filter hanya ditambahkan jika diisi dari query
+                const where = {};
+                if (is_active !== undefined) {
+                    where.is_active = is_active;
+                }
+                if (specialist_id) {
+                    where.specialist_id = specialist_id;
+                }
+                if (search) {
+                    where.full_name = { contains: search, mode: 'insensitive' };
+                }
+                // Rentang biaya: gte = minimal, lte = maksimal (undefined diabaikan Prisma)
+                if (min_fee !== undefined || max_fee !== undefined) {
+                    where.consultation_fee = { gte: min_fee, lte: max_fee };
+                }
+                // Dokter yang punya jadwal aktif di hari tersebut
+                if (day_of_week !== undefined) {
+                    where.doctor_schedules = { some: { day_of_week, is_active: true } };
+                }
+                const [doctors, total] = yield Promise.all([
+                    prisma_client_config_1.prisma.doctors.findMany({
+                        where,
+                        include: doctorInclude,
+                        orderBy: orderBy[sort],
+                        skip: (page - 1) * limit,
+                        take: limit,
+                    }),
+                    prisma_client_config_1.prisma.doctors.count({ where }),
+                ]);
+                return {
+                    doctors,
+                    meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+                };
             }
-            if (search) {
-                where.full_name = { contains: search, mode: 'insensitive' };
-            }
-            // Rentang biaya: gte = minimal, lte = maksimal (undefined diabaikan Prisma)
-            if (min_fee !== undefined || max_fee !== undefined) {
-                where.consultation_fee = { gte: min_fee, lte: max_fee };
-            }
-            // Dokter yang punya jadwal aktif di hari tersebut
-            if (day_of_week !== undefined) {
-                where.doctor_schedules = { some: { day_of_week, is_active: true } };
-            }
-            const [doctors, total] = yield Promise.all([
-                prisma_client_config_1.prisma.doctors.findMany({
-                    where,
-                    include: doctorInclude,
-                    orderBy: orderBy[sort],
-                    skip: (page - 1) * limit,
-                    take: limit,
-                }),
-                prisma_client_config_1.prisma.doctors.count({ where }),
-            ]);
-            return {
-                doctors,
-                meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
-            };
         });
     }
     // Unggah foto lalu kembalikan URL; disimpan ke dokter lewat create/update
@@ -166,31 +254,91 @@ class DoctorService {
     // Profil dokter + ringkasan rating & ulasan terbaru
     static getById(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
-            const where = { doctor_id: params.id };
-            const [doctor, summary, reviews] = yield Promise.all([
-                this.findOrFail(params.id),
-                prisma_client_config_1.prisma.ratings.aggregate({ where, _avg: { rating: true }, _count: { rating: true } }),
-                // Nama pasien dikirim penuh, frontend hanya menampilkan nama depan
-                prisma_client_config_1.prisma.ratings.findMany({
-                    where,
-                    orderBy: { created_at: 'desc' },
-                    take: appointment_constants_1.LATEST_REVIEWS_LIMIT,
-                    select: {
-                        id: true,
-                        rating: true,
-                        review: true,
-                        created_at: true,
-                        patient_profiles: { select: { users: { select: { full_name: true } } } },
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: d, error } = yield supabase
+                    .from('doctors')
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*), ratings(*)')
+                    .eq('id', params.id)
+                    .single();
+                if (error || !d)
+                    throw error || new Error('doctor not found');
+                const schedules = (d.doctor_schedules || [])
+                    .filter((s) => s.is_active)
+                    .map((s) => ({
+                    id: s.id,
+                    day_of_week: Number(s.day_of_week),
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    patient_quota: Number(s.patient_quota),
+                }))
+                    .sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time));
+                const ratings = Array.isArray(d.ratings) ? d.ratings : [];
+                const ratingCount = ratings.length;
+                const ratingSum = ratings.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+                const ratingAvg = ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(1)) : null;
+                return {
+                    id: d.id,
+                    user_id: d.id,
+                    full_name: d.full_name,
+                    bio: d.bio,
+                    experience_years: Number(d.experience_years) || 0,
+                    consultation_fee: d.consultation_fee,
+                    photo: d.photo_url || d.photo || null,
+                    photo_url: d.photo_url || d.photo || null,
+                    specialist_id: d.specialist_id,
+                    is_active: Boolean(d.is_active),
+                    created_at: d.created_at,
+                    updated_at: d.updated_at,
+                    users: {
+                        id: d.id,
+                        email: '',
+                        full_name: d.full_name,
+                        phone_number: null,
+                        profile_picture: d.photo_url || d.photo || null,
                     },
-                }),
-            ]);
-            // Rata-rata rating dibulatkan 1 angka di belakang koma, null jika belum ada rating
-            const avg = summary._avg.rating;
-            let ratingAvg = null;
-            if (avg !== null) {
-                ratingAvg = Number(avg.toFixed(1));
+                    specialists: d.specialists
+                        ? { id: d.specialists.id, name: d.specialists.name }
+                        : null,
+                    doctor_schedules: schedules,
+                    rating_avg: ratingAvg,
+                    rating_count: ratingCount,
+                    reviews: ratings.map((r) => ({
+                        id: r.id,
+                        rating: r.rating,
+                        review: r.review,
+                        created_at: r.created_at,
+                        patient_profiles: { users: { full_name: 'Pasien' } },
+                    })),
+                };
             }
-            return Object.assign(Object.assign({}, doctor), { rating_avg: ratingAvg, rating_count: summary._count.rating, reviews });
+            catch (_b) {
+                const where = { doctor_id: params.id };
+                const [doctor, summary, reviews] = yield Promise.all([
+                    this.findOrFail(params.id),
+                    prisma_client_config_1.prisma.ratings.aggregate({ where, _avg: { rating: true }, _count: { rating: true } }),
+                    // Nama pasien dikirim penuh, frontend hanya menampilkan nama depan
+                    prisma_client_config_1.prisma.ratings.findMany({
+                        where,
+                        orderBy: { created_at: 'desc' },
+                        take: appointment_constants_1.LATEST_REVIEWS_LIMIT,
+                        select: {
+                            id: true,
+                            rating: true,
+                            review: true,
+                            created_at: true,
+                            patient_profiles: { select: { users: { select: { full_name: true } } } },
+                        },
+                    }),
+                ]);
+                // Rata-rata rating dibulatkan 1 angka di belakang koma, null jika belum ada rating
+                const avg = summary._avg.rating;
+                let ratingAvg = null;
+                if (avg !== null) {
+                    ratingAvg = Number(avg.toFixed(1));
+                }
+                return Object.assign(Object.assign({}, doctor), { rating_avg: ratingAvg, rating_count: summary._count.rating, reviews });
+            }
         });
     }
     static update(_a) {

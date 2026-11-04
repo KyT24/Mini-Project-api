@@ -1,6 +1,7 @@
 import { prisma } from '../../configs/prisma-client.config';
 import { AppError } from '../../errors/app.error';
 import { Prisma } from '../../generated/prisma/client';
+import { getSupabaseClient } from '../../lib/supabase.lib';
 import {
   createSpecialistRequest,
   getSpecialistsRequest,
@@ -43,30 +44,70 @@ export class SpecialistService {
   static async getAll({ query }: getSpecialistsRequest) {
     const { page, limit, search, is_active } = query;
 
-    // Filter hanya ditambahkan jika diisi dari query
-    const where: Prisma.specialistsWhereInput = {};
-    if (is_active !== undefined) {
-      where.is_active = is_active;
-    }
-    if (search) {
-      where.name = { contains: search, mode: 'insensitive' };
-    }
+    try {
+      const supabase = getSupabaseClient();
+      let q = supabase
+        .from('specialists')
+        .select('*, doctors:doctors(id)', { count: 'exact' });
 
-    const [specialists, total] = await Promise.all([
-      prisma.specialists.findMany({
-        where,
-        include: specialistInclude,
-        orderBy: { name: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.specialists.count({ where }),
-    ]);
+      if (is_active !== undefined) {
+        q = q.eq('is_active', is_active);
+      }
+      if (search) {
+        q = q.ilike('name', `%${search}%`);
+      }
 
-    return {
-      specialists,
-      meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
-    };
+      q = q.order('name', { ascending: true });
+
+      const from = (page - 1) * limit;
+      const to = from + limit - 1;
+      const { data, count, error } = await q.range(from, to);
+
+      if (error) throw error;
+
+      const specialists = (data || []).map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        is_active: s.is_active,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+        _count: {
+          doctors: Array.isArray(s.doctors) ? s.doctors.length : 0,
+        },
+      }));
+
+      const total = count || specialists.length;
+      return {
+        specialists,
+        meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+      };
+    } catch {
+      // Filter hanya ditambahkan jika diisi dari query
+      const where: Prisma.specialistsWhereInput = {};
+      if (is_active !== undefined) {
+        where.is_active = is_active;
+      }
+      if (search) {
+        where.name = { contains: search, mode: 'insensitive' };
+      }
+
+      const [specialists, total] = await Promise.all([
+        prisma.specialists.findMany({
+          where,
+          include: specialistInclude,
+          orderBy: { name: 'asc' },
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.specialists.count({ where }),
+      ]);
+
+      return {
+        specialists,
+        meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
+      };
+    }
   }
 
   static async getById({ params }: specialistIdRequest) {

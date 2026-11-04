@@ -24,6 +24,7 @@ exports.ScheduleService = void 0;
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
 const time_lib_1 = require("../../lib/time.lib");
+const supabase_lib_1 = require("../../lib/supabase.lib");
 const scheduleOrder = [
     { day_of_week: 'asc' },
     { start_time: 'asc' },
@@ -69,14 +70,39 @@ class ScheduleService {
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { doctor_id, is_active } = query;
-            const where = { doctor_id };
-            if (is_active !== undefined) {
-                where.is_active = is_active;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase.from('doctor_schedules').select('*');
+                if (doctor_id)
+                    q = q.eq('doctor_id', doctor_id);
+                if (is_active !== undefined)
+                    q = q.eq('is_active', is_active);
+                q = q.order('day_of_week', { ascending: true }).order('start_time', { ascending: true });
+                const { data, error } = yield q;
+                if (error)
+                    throw error;
+                return (data || []).map((s) => ({
+                    id: s.id,
+                    doctor_id: s.doctor_id,
+                    day_of_week: Number(s.day_of_week),
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    patient_quota: Number(s.patient_quota),
+                    is_active: Boolean(s.is_active),
+                    created_at: s.created_at,
+                    updated_at: s.updated_at,
+                }));
             }
-            return yield prisma_client_config_1.prisma.doctor_schedules.findMany({
-                where,
-                orderBy: scheduleOrder,
-            });
+            catch (_b) {
+                const where = { doctor_id };
+                if (is_active !== undefined) {
+                    where.is_active = is_active;
+                }
+                return yield prisma_client_config_1.prisma.doctor_schedules.findMany({
+                    where,
+                    orderBy: scheduleOrder,
+                });
+            }
         });
     }
     static create(_a) {

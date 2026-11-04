@@ -50,6 +50,28 @@ class AppointmentService {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { doctor_id, date } = query;
             this.assertBookableDate(date);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: rpcSlots, error: rpcErr } = yield supabase.rpc('get_availability', {
+                    p_doctor_id: doctor_id,
+                    p_date: date,
+                });
+                if (!rpcErr && rpcSlots && Array.isArray(rpcSlots)) {
+                    const slots = rpcSlots.map((slot) => ({
+                        schedule_id: slot.schedule_id || slot.id,
+                        start_time: (slot.start_time || '').slice(0, 5),
+                        end_time: (slot.end_time || '').slice(0, 5),
+                        quota: Number(slot.quota) || 0,
+                        booked: Number(slot.booked) || 0,
+                        remaining: Number(slot.remaining) || 0,
+                        available: Boolean(slot.available),
+                    }));
+                    return { doctor_id, date, slots };
+                }
+            }
+            catch (_b) {
+                // Lanjut ke fallback jika RPC Supabase tidak tersedia
+            }
             yield this.findActiveDoctorOrFail(doctor_id);
             yield (0, appointment_helpers_1.syncStatuses)();
             const now = new Date();
