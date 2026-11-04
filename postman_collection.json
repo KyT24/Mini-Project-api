@@ -58,7 +58,7 @@
     },
     {
       "key": "appointment_id",
-      "value": "",
+      "value": "55555555-5555-5555-5555-555555555555",
       "type": "string"
     }
   ],
@@ -143,7 +143,7 @@
           }
         },
         {
-          "name": "Get Current User Profile (/auth/me)",
+          "name": "Get Current Session User (/auth/me)",
           "request": {
             "method": "GET",
             "header": [
@@ -171,7 +171,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"pasien.baru@example.com\",\n  \"password\": \"Password123!\",\n  \"full_name\": \"Siti Nurhaliza\",\n  \"phone_number\": \"081298765432\"\n}"
+              "raw": "{\n  \"email\": \"pasien.baru@example.com\",\n  \"password\": \"Password123!\",\n  \"full_name\": \"Dewi Sartika\",\n  \"phone_number\": \"081298765432\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/auth/register",
@@ -196,7 +196,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"staff.admin@klinik.test\",\n  \"password\": \"Admin123!\",\n  \"full_name\": \"Staff Admin Baru\",\n  \"phone_number\": \"081211112222\"\n}"
+              "raw": "{\n  \"email\": \"staff.admin@klinik.test\",\n  \"password\": \"Admin123!\",\n  \"full_name\": \"Staf Admin Klinik\",\n  \"phone_number\": \"081211112222\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/auth/admins",
@@ -225,22 +225,73 @@
       ]
     },
     {
-      "name": "2. Specialists",
+      "name": "2. Patient Profile",
       "item": [
         {
-          "name": "List Specialists",
+          "name": "Get My Profile (Patient)",
           "request": {
             "method": "GET",
-            "header": [],
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
             "url": {
-              "raw": "{{base_url}}/specialists",
+              "raw": "{{base_url}}/patients/me",
               "host": ["{{base_url}}"],
-              "path": ["specialists"]
+              "path": ["patients", "me"]
             }
           }
         },
         {
-          "name": "Get Specialist by ID",
+          "name": "Update My Profile (Patient)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Budi Pasien Demo, S.T.\",\n  \"phone_number\": \"081234567899\",\n  \"date_of_birth\": \"1995-08-17\",\n  \"gender\": \"male\",\n  \"address\": \"Jl. Senopati No. 45, Jakarta Selatan\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/patients/me",
+              "host": ["{{base_url}}"],
+              "path": ["patients", "me"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Specialists",
+      "item": [
+        {
+          "name": "List Specialists (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/specialists?page=1&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["specialists"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Specialist by ID (Public)",
           "request": {
             "method": "GET",
             "header": [],
@@ -267,7 +318,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bedah Plastik & Rekonstruksi Estetika (Sp.B.P.R.E)\"\n}"
+              "raw": "{\n  \"name\": \"Bedah Plastik & Rekonstruksi Estetika (Sp.B.P.R.E)\",\n  \"description\": \"Tindakan bedah estetika kontur wajah, rhinoplasty, dan rekonstruksi.\",\n  \"is_active\": true\n}"
             },
             "url": {
               "raw": "{{base_url}}/specialists",
@@ -279,7 +330,7 @@
         {
           "name": "Update Specialist (Admin)",
           "request": {
-            "method": "PUT",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Authorization",
@@ -292,7 +343,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Dermatologi, Venereologi & Estetika Klinis\"\n}"
+              "raw": "{\n  \"name\": \"Dermatologi, Venereologi & Estetika Klinis\",\n  \"description\": \"Spesialisasi kesehatan kulit wajah dan tubuh terpadu.\",\n  \"is_active\": true\n}"
             },
             "url": {
               "raw": "{{base_url}}/specialists/{{specialist_id}}",
@@ -321,10 +372,10 @@
       ]
     },
     {
-      "name": "3. Doctors",
+      "name": "4. Doctors",
       "item": [
         {
-          "name": "List Doctors",
+          "name": "List Doctors (Public)",
           "request": {
             "method": "GET",
             "header": [],
@@ -341,7 +392,7 @@
           }
         },
         {
-          "name": "Get Doctor by ID",
+          "name": "Get Doctor by ID (Public)",
           "request": {
             "method": "GET",
             "header": [],
@@ -368,7 +419,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"dr.clarissa@klinik.test\",\n  \"password\": \"Dokter123!\",\n  \"full_name\": \"dr. Clarissa Wijaya, Sp.D.V.E\",\n  \"phone_number\": \"081299887766\",\n  \"specialist_id\": \"{{specialist_id}}\",\n  \"consultation_fee\": 350000,\n  \"experience_years\": 8,\n  \"alumnus\": \"Universitas Airlangga\",\n  \"description\": \"Fokus pada perawatan laser acne scars dan peremajaan kulit modern.\"\n}"
+              "raw": "{\n  \"email\": \"dr.clarissa@klinik.test\",\n  \"password\": \"Dokter123!\",\n  \"full_name\": \"dr. Clarissa Wijaya, Sp.D.V.E\",\n  \"phone_number\": \"081299887766\",\n  \"specialist_id\": \"{{specialist_id}}\",\n  \"consultation_fee\": \"350000.00\",\n  \"experience_years\": 8,\n  \"bio\": \"Fokus pada perawatan laser acne scars dan peremajaan kulit modern.\",\n  \"is_active\": true\n}"
             },
             "url": {
               "raw": "{{base_url}}/doctors",
@@ -378,9 +429,36 @@
           }
         },
         {
-          "name": "Update Doctor (Admin)",
+          "name": "Upload Doctor Photo (Admin - Multipart)",
           "request": {
-            "method": "PUT",
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "photo",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/doctors/photo",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "photo"]
+            }
+          }
+        },
+        {
+          "name": "Upload Doctor Photo (Admin - Base64)",
+          "request": {
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
@@ -393,7 +471,32 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"consultation_fee\": 320000,\n  \"experience_years\": 11,\n  \"description\": \"Spesialis estetika wajah, anti-aging, dan dermatologi kosmetik bersertifikasi internasional.\"\n}"
+              "raw": "{\n  \"photo_base64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/doctors/photo",
+              "host": ["{{base_url}}"],
+              "path": ["doctors", "photo"]
+            }
+          }
+        },
+        {
+          "name": "Update Doctor (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"consultation_fee\": \"320000.00\",\n  \"experience_years\": 11,\n  \"bio\": \"Spesialis estetika wajah, anti-aging, dan dermatologi kosmetik bersertifikasi internasional.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/doctors/{{doctor_id}}",
@@ -422,19 +525,20 @@
       ]
     },
     {
-      "name": "4. Schedules",
+      "name": "5. Schedules",
       "item": [
         {
-          "name": "List Doctor Schedules",
+          "name": "List Doctor Schedules (Public)",
           "request": {
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/schedules?doctor_id={{doctor_id}}",
+              "raw": "{{base_url}}/schedules?doctor_id={{doctor_id}}&is_active=true",
               "host": ["{{base_url}}"],
               "path": ["schedules"],
               "query": [
-                { "key": "doctor_id", "value": "{{doctor_id}}" }
+                { "key": "doctor_id", "value": "{{doctor_id}}" },
+                { "key": "is_active", "value": "true" }
               ]
             }
           }
@@ -455,7 +559,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"doctor_id\": \"{{doctor_id}}\",\n  \"day_of_week\": 1,\n  \"start_time\": \"09:00:00\",\n  \"end_time\": \"14:00:00\",\n  \"patient_quota\": 15\n}"
+              "raw": "{\n  \"doctor_id\": \"{{doctor_id}}\",\n  \"day_of_week\": 1,\n  \"start_time\": \"09:00\",\n  \"end_time\": \"14:00\",\n  \"patient_quota\": 15,\n  \"is_active\": true\n}"
             },
             "url": {
               "raw": "{{base_url}}/schedules",
@@ -463,14 +567,56 @@
               "path": ["schedules"]
             }
           }
+        },
+        {
+          "name": "Update Schedule Slot (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"start_time\": \"09:00\",\n  \"end_time\": \"15:00\",\n  \"patient_quota\": 20,\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/schedules/{{schedule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["schedules", "{{schedule_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Schedule Slot (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/schedules/{{schedule_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["schedules", "{{schedule_id}}"]
+            }
+          }
         }
       ]
     },
     {
-      "name": "5. Appointments & Booking",
+      "name": "6. Appointments & Booking",
       "item": [
         {
-          "name": "Check Schedule Availability",
+          "name": "Check Schedule Availability (Public)",
           "request": {
             "method": "GET",
             "header": [],
@@ -486,7 +632,7 @@
           }
         },
         {
-          "name": "Book Appointment (Patient)",
+          "name": "Create Appointment (Patient)",
           "event": [
             {
               "listen": "test",
@@ -496,7 +642,7 @@
                   "    var json = pm.response.json();",
                   "    if (json.data && json.data.id) {",
                   "        pm.collectionVariables.set('appointment_id', json.data.id);",
-                  "        console.log('Booked Appointment ID:', json.data.id);",
+                  "        console.log('Created Appointment ID:', json.data.id);",
                   "    }",
                   "}"
                 ],
@@ -518,17 +664,44 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"schedule_id\": \"{{schedule_id}}\",\n  \"date\": \"2026-11-06\"\n}"
+              "raw": "{\n  \"doctor_id\": \"{{doctor_id}}\",\n  \"session_date\": \"2026-11-06\",\n  \"start_time\": \"08:00\",\n  \"treatment_slug\": \"acne-dermapeel\"\n}"
             },
             "url": {
-              "raw": "{{base_url}}/appointments/book",
+              "raw": "{{base_url}}/appointments",
               "host": ["{{base_url}}"],
-              "path": ["appointments", "book"]
+              "path": ["appointments"]
             }
           }
         },
         {
-          "name": "Upload Payment Proof (Base64)",
+          "name": "Upload Payment Proof (Patient - Multipart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}/payment-proof",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}", "payment-proof"]
+            }
+          }
+        },
+        {
+          "name": "Upload Payment Proof (Patient - Base64)",
           "request": {
             "method": "POST",
             "header": [
@@ -543,7 +716,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"file\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\",\n  \"mime_type\": \"image/png\"\n}"
+              "raw": "{\n  \"image_base64\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/appointments/{{appointment_id}}/payment-proof",
@@ -563,16 +736,37 @@
               }
             ],
             "url": {
-              "raw": "{{base_url}}/appointments/my",
+              "raw": "{{base_url}}/appointments/my?page=1&limit=10",
               "host": ["{{base_url}}"],
-              "path": ["appointments", "my"]
+              "path": ["appointments", "my"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Appointment by ID (Patient)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/appointments/{{appointment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["appointments", "{{appointment_id}}"]
             }
           }
         },
         {
           "name": "Cancel Appointment (Patient)",
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Authorization",
@@ -587,7 +781,7 @@
           }
         },
         {
-          "name": "Rate & Review Doctor",
+          "name": "Rate & Review Doctor (Patient)",
           "request": {
             "method": "POST",
             "header": [
@@ -602,7 +796,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"rating\": 5,\n  \"review\": \"Pelayanan dokter sangat baik, ramah, dan solutif!\"\n}"
+              "raw": "{\n  \"rating\": 5,\n  \"review\": \"Pelayanan dokter sangat teliti, ramah, dan hasil perawatannya sangat memuaskan!\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/appointments/{{appointment_id}}/rating",
@@ -614,7 +808,7 @@
       ]
     },
     {
-      "name": "6. Queue & Live TV Monitor",
+      "name": "7. Queue & Live TV Monitor",
       "item": [
         {
           "name": "Live Queue TV Monitor (Public)",
@@ -629,7 +823,7 @@
           }
         },
         {
-          "name": "Check-In Patient QR Code (Admin)",
+          "name": "Check-In Patient On-site / QR Code (Admin/Staff)",
           "request": {
             "method": "POST",
             "header": [
@@ -644,7 +838,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"token\": \"APT-20261104-001\"\n}"
+              "raw": "{\n  \"qr_token\": \"APT-20261105-001\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/admin/queue/check-in",
@@ -654,7 +848,7 @@
           }
         },
         {
-          "name": "Call Next Patient (Admin)",
+          "name": "Call Next Patient (Admin/Staff)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -679,7 +873,7 @@
           }
         },
         {
-          "name": "Mark Patient No-Show (Admin)",
+          "name": "Mark Patient No-Show (Admin/Staff)",
           "request": {
             "method": "PATCH",
             "header": [
@@ -698,7 +892,7 @@
       ]
     },
     {
-      "name": "7. Admin Dashboard & Analytics",
+      "name": "8. Admin Dashboard & Analytics",
       "item": [
         {
           "name": "Dashboard Overview Metrics (Admin)",
@@ -742,7 +936,7 @@
       ]
     },
     {
-      "name": "8. Admin Appointments",
+      "name": "9. Admin Appointments",
       "item": [
         {
           "name": "List Appointments (Admin)",
@@ -767,9 +961,26 @@
           }
         },
         {
+          "name": "Get Appointment by ID (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/admin/appointments/{{appointment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "appointments", "{{appointment_id}}"]
+            }
+          }
+        },
+        {
           "name": "Approve Appointment (Admin)",
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Authorization",
@@ -786,7 +997,7 @@
         {
           "name": "Reject Appointment (Admin)",
           "request": {
-            "method": "POST",
+            "method": "PATCH",
             "header": [
               {
                 "key": "Authorization",
@@ -807,9 +1018,33 @@
               "path": ["admin", "appointments", "{{appointment_id}}", "reject"]
             }
           }
+        },
+        {
+          "name": "Update Appointment (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Catatan update dari admin klinik\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/appointments/{{appointment_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "appointments", "{{appointment_id}}"]
+            }
+          }
         }
       ]
     }
   ]
 }
-
