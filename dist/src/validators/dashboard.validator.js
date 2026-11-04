@@ -35,11 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getDashboardStatsSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 exports.getDashboardStatsSchema = z.object({
     query: z.object({
         period: z.enum(['day', 'month', 'year']).default('month'),
         from: z.iso.date('From date must be in YYYY-MM-DD format').optional(),
         to: z.iso.date('To date must be in YYYY-MM-DD format').optional(),
-        doctor_id: z.uuid('Doctor ID must be a valid UUID').optional(),
+        doctor_id: (0, validators_config_1.uuidValidator)('Doctor ID must be a valid UUID').optional(),
     }),
 });

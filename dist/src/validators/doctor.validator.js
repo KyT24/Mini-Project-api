@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateDoctorSchema = exports.doctorIdSchema = exports.getDoctorsSchema = exports.createDoctorSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = (schema) => z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), schema);
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
@@ -52,7 +53,7 @@ const consultation_fee = z
     .pipe(z
     .string()
     .regex(/^\d{1,10}(\.\d{1,2})?$/, 'Consultation fee must be >= 0, max 10 digits with up to 2 decimals'));
-const id = z.uuid('Doctor id must be a valid uuid');
+const id = (0, validators_config_1.uuidValidator)('Doctor id must be a valid uuid');
 // Data akun login dokter, dibuat bersamaan dengan profil dokter
 const email = z.email('Email is not valid').trim().max(255);
 const phone_number = z
@@ -76,7 +77,7 @@ const experience_years = z.coerce
     .min(0, 'Experience years cannot be negative')
     .max(2147483647, 'Experience years is too large');
 const photo = emptyToNull(z.string().trim().max(255, 'Photo have maximum 255 characters').nullable()).optional();
-const specialist_id = emptyToNull(z.uuid('Specialist id must be a valid uuid').nullable()).optional();
+const specialist_id = emptyToNull((0, validators_config_1.uuidValidator)('Specialist id must be a valid uuid').nullable()).optional();
 exports.createDoctorSchema = z.object({
     body: z.object({
         email,

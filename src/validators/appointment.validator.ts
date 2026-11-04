@@ -1,6 +1,7 @@
 import * as z from 'zod';
+import { uuidValidator } from './validators.config';
 
-const doctor_id = z.uuid('Doctor id must be a valid uuid');
+const doctor_id = uuidValidator('Doctor id must be a valid uuid');
 
 // Tanggal kalender "YYYY-MM-DD" (zona waktu klinik)
 const session_date = z.iso.date('Session date must be in YYYY-MM-DD format');
@@ -19,10 +20,12 @@ export type getAvailabilityRequest = z.infer<typeof getAvailabilitySchema>;
 export const createAppointmentSchema = z.object({
   body: z.object({
     treatment_slug: z
-      .string('Treatment is required')
+      .string()
       .trim()
-      .min(1, 'Treatment is required')
-      .max(150),
+      .min(1)
+      .max(150)
+      .optional()
+      .default('acne-dermapeel'),
     doctor_id,
     session_date,
     start_time,
@@ -40,13 +43,13 @@ export const getMyAppointmentsSchema = z.object({
 
 export type getMyAppointmentsRequest = z.infer<typeof getMyAppointmentsSchema>;
 
+const id = uuidValidator('Appointment id must be a valid uuid');
+
 export const appointmentIdSchema = z.object({
-  params: z.object({ id: z.uuid('Appointment id must be a valid uuid') }),
+  params: z.object({ id }),
 });
 
 export type appointmentIdRequest = z.infer<typeof appointmentIdSchema>;
-
-const id = z.uuid('Appointment id must be a valid uuid');
 
 export const TRANSACTION_STATUSES = [
   'waiting_payment',

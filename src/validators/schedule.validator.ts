@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { uuidValidator } from './validators.config';
 
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
 const boolFromString = z.preprocess((value) => {
@@ -7,9 +8,9 @@ const boolFromString = z.preprocess((value) => {
   return value;
 }, z.boolean('is_active must be true or false'));
 
-const id = z.uuid('Schedule id must be a valid uuid');
+const id = uuidValidator('Schedule id must be a valid uuid');
 
-const doctor_id = z.uuid('Doctor id must be a valid uuid');
+const doctor_id = uuidValidator('Doctor id must be a valid uuid');
 
 const day_of_week = z.coerce
   .number('Day must be a number')

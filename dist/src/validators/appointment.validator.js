@@ -35,7 +35,8 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.rateAppointmentSchema = exports.rejectAppointmentSchema = exports.getAdminAppointmentsSchema = exports.TRANSACTION_STATUSES = exports.appointmentIdSchema = exports.getMyAppointmentsSchema = exports.createAppointmentSchema = exports.getAvailabilitySchema = void 0;
 const z = __importStar(require("zod"));
-const doctor_id = z.uuid('Doctor id must be a valid uuid');
+const validators_config_1 = require("./validators.config");
+const doctor_id = (0, validators_config_1.uuidValidator)('Doctor id must be a valid uuid');
 // Tanggal kalender "YYYY-MM-DD" (zona waktu klinik)
 const session_date = z.iso.date('Session date must be in YYYY-MM-DD format');
 // Jam mulai jadwal "HH:mm"; dicocokkan dengan jadwal dokter di service
@@ -48,10 +49,12 @@ exports.getAvailabilitySchema = z.object({
 exports.createAppointmentSchema = z.object({
     body: z.object({
         treatment_slug: z
-            .string('Treatment is required')
+            .string()
             .trim()
-            .min(1, 'Treatment is required')
-            .max(150),
+            .min(1)
+            .max(150)
+            .optional()
+            .default('acne-dermapeel'),
         doctor_id,
         session_date,
         start_time,
@@ -63,10 +66,10 @@ exports.getMyAppointmentsSchema = z.object({
         limit: z.coerce.number().int().min(1).max(50).default(10),
     }),
 });
+const id = (0, validators_config_1.uuidValidator)('Appointment id must be a valid uuid');
 exports.appointmentIdSchema = z.object({
-    params: z.object({ id: z.uuid('Appointment id must be a valid uuid') }),
+    params: z.object({ id }),
 });
-const id = z.uuid('Appointment id must be a valid uuid');
 exports.TRANSACTION_STATUSES = [
     'waiting_payment',
     'waiting_confirmation',

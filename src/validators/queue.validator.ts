@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { uuidValidator } from './validators.config';
 
 export const checkInSchema = z.object({
   body: z.object({
@@ -13,7 +14,7 @@ export type checkInRequest = z.infer<typeof checkInSchema>;
 
 export const callNextSchema = z.object({
   body: z.object({
-    session_id: z.uuid('Session ID must be a valid UUID'),
+    session_id: uuidValidator('Session ID must be a valid UUID'),
   }),
 });
 
@@ -21,7 +22,7 @@ export type callNextRequest = z.infer<typeof callNextSchema>;
 
 export const noShowSchema = z.object({
   params: z.object({
-    id: z.uuid('Appointment ID must be a valid UUID'),
+    id: uuidValidator('Appointment ID must be a valid UUID'),
   }),
 });
 

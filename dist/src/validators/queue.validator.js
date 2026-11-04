@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.noShowSchema = exports.callNextSchema = exports.checkInSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 exports.checkInSchema = z.object({
     body: z.object({
         qr_token: z
@@ -45,11 +46,11 @@ exports.checkInSchema = z.object({
 });
 exports.callNextSchema = z.object({
     body: z.object({
-        session_id: z.uuid('Session ID must be a valid UUID'),
+        session_id: (0, validators_config_1.uuidValidator)('Session ID must be a valid UUID'),
     }),
 });
 exports.noShowSchema = z.object({
     params: z.object({
-        id: z.uuid('Appointment ID must be a valid UUID'),
+        id: (0, validators_config_1.uuidValidator)('Appointment ID must be a valid UUID'),
     }),
 });

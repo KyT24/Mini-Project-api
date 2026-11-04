@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateScheduleSchema = exports.scheduleIdSchema = exports.createScheduleSchema = exports.getSchedulesSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
 const boolFromString = z.preprocess((value) => {
     if (value === 'true' || value === '1')
@@ -43,8 +44,8 @@ const boolFromString = z.preprocess((value) => {
         return false;
     return value;
 }, z.boolean('is_active must be true or false'));
-const id = z.uuid('Schedule id must be a valid uuid');
-const doctor_id = z.uuid('Doctor id must be a valid uuid');
+const id = (0, validators_config_1.uuidValidator)('Schedule id must be a valid uuid');
+const doctor_id = (0, validators_config_1.uuidValidator)('Doctor id must be a valid uuid');
 const day_of_week = z.coerce
     .number('Day must be a number')
     .int('Day must be an integer')

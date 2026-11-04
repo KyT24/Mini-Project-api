@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { uuidValidator } from './validators.config';
 
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
@@ -17,7 +18,7 @@ const boolFromString = z.preprocess((value) => {
   return value;
 }, z.boolean('is_active must be true or false'));
 
-const id = z.uuid('Specialist id must be a valid uuid');
+const id = uuidValidator('Specialist id must be a valid uuid');
 
 const name = z
   .string('Name is required')

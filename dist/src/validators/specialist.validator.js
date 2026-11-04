@@ -35,6 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateSpecialistSchema = exports.specialistIdSchema = exports.getSpecialistsSchema = exports.createSpecialistSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = (schema) => z.preprocess((value) => {
     if (typeof value === 'string' && value.trim() === '')
@@ -49,7 +50,7 @@ const boolFromString = z.preprocess((value) => {
         return false;
     return value;
 }, z.boolean('is_active must be true or false'));
-const id = z.uuid('Specialist id must be a valid uuid');
+const id = (0, validators_config_1.uuidValidator)('Specialist id must be a valid uuid');
 const name = z
     .string('Name is required')
     .trim()
