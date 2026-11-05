@@ -1181,18 +1181,46 @@ begin
     (v_doc_reza, 6, '14:00', '18:00', 12, true);
 
   -- 4. Akun Demo (Auth & Profile)
+  -- Perbaiki baris auth.users yang memiliki token NULL agar GoTrue scan parser tidak crash
+  begin
+    update auth.users
+    set 
+      confirmation_token = coalesce(confirmation_token, ''),
+      recovery_token = coalesce(recovery_token, ''),
+      email_change_token_new = coalesce(email_change_token_new, ''),
+      email_change = coalesce(email_change, ''),
+      is_sso_user = coalesce(is_sso_user, false)
+    where 
+      confirmation_token is null
+      or recovery_token is null
+      or email_change_token_new is null
+      or email_change is null;
+  exception when others then
+    null;
+  end;
+
   -- A. Admin Utama
   delete from auth.users where id = v_admin_id or email = 'admin@klinik.test';
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at
   ) values (
     '00000000-0000-0000-0000-000000000000', v_admin_id, 'authenticated', 'authenticated',
     'admin@klinik.test', crypt('Admin123!', gen_salt('bf')), now(),
+    '', '', '', '',
     '{"provider":"email","providers":["email"]}'::jsonb,
     '{"full_name":"Admin Utama Klinik Estetika","phone_number":"081234567890"}'::jsonb,
-    now(), now()
+    false, now(), now()
   );
+
+  begin
+    insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    values (v_admin_id, v_admin_id, v_admin_id::text, jsonb_build_object('sub', v_admin_id::text, 'email', 'admin@klinik.test', 'email_verified', true), 'email', now(), now(), now())
+    on conflict do nothing;
+  exception when others then
+    null;
+  end;
 
   insert into public.profiles (id, role, full_name, phone_number)
   values (v_admin_id, 'admin', 'Admin Utama Klinik Estetika', '081234567890')
@@ -1202,16 +1230,29 @@ begin
   delete from auth.users where id in (v_patient_id, v_patient_id_p1) or email in ('pasien@klinik.test', 'pasien1@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at
   ) values 
     ('00000000-0000-0000-0000-000000000000', v_patient_id, 'authenticated', 'authenticated',
      'pasien@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Budi Pasien Demo","phone_number":"08123456789"}'::jsonb, now(), now()),
+     '{"full_name":"Budi Pasien Demo","phone_number":"08123456789"}'::jsonb, false, now(), now()),
     ('00000000-0000-0000-0000-000000000000', v_patient_id_p1, 'authenticated', 'authenticated',
      'pasien1@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Budi Pasien Satu Demo","phone_number":"081234567801"}'::jsonb, now(), now());
+     '{"full_name":"Budi Pasien Satu Demo","phone_number":"081234567801"}'::jsonb, false, now(), now());
+
+  begin
+    insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    values 
+      (v_patient_id, v_patient_id, v_patient_id::text, jsonb_build_object('sub', v_patient_id::text, 'email', 'pasien@klinik.test', 'email_verified', true), 'email', now(), now(), now()),
+      (v_patient_id_p1, v_patient_id_p1, v_patient_id_p1::text, jsonb_build_object('sub', v_patient_id_p1::text, 'email', 'pasien1@klinik.test', 'email_verified', true), 'email', now(), now(), now())
+    on conflict do nothing;
+  exception when others then
+    null;
+  end;
 
   insert into public.profiles (id, role, full_name, phone_number)
   values 
@@ -1223,16 +1264,29 @@ begin
   delete from auth.users where id in (v_patient_id_2, v_patient_id_p2) or email in ('siti@klinik.test', 'pasien2@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at
   ) values 
     ('00000000-0000-0000-0000-000000000000', v_patient_id_2, 'authenticated', 'authenticated',
      'siti@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Siti Rahayu","phone_number":"08129988776"}'::jsonb, now(), now()),
+     '{"full_name":"Siti Rahayu","phone_number":"08129988776"}'::jsonb, false, now(), now()),
     ('00000000-0000-0000-0000-000000000000', v_patient_id_p2, 'authenticated', 'authenticated',
      'pasien2@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Siti Rahayu (Pasien 2)","phone_number":"081234567802"}'::jsonb, now(), now());
+     '{"full_name":"Siti Rahayu (Pasien 2)","phone_number":"081234567802"}'::jsonb, false, now(), now());
+
+  begin
+    insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    values 
+      (v_patient_id_2, v_patient_id_2, v_patient_id_2::text, jsonb_build_object('sub', v_patient_id_2::text, 'email', 'siti@klinik.test', 'email_verified', true), 'email', now(), now(), now()),
+      (v_patient_id_p2, v_patient_id_p2, v_patient_id_p2::text, jsonb_build_object('sub', v_patient_id_p2::text, 'email', 'pasien2@klinik.test', 'email_verified', true), 'email', now(), now(), now())
+    on conflict do nothing;
+  exception when others then
+    null;
+  end;
 
   insert into public.profiles (id, role, full_name, phone_number)
   values 
@@ -1244,16 +1298,29 @@ begin
   delete from auth.users where id in (v_patient_id_3, v_patient_id_p3) or email in ('ahmad@klinik.test', 'pasien3@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
-    raw_app_meta_data, raw_user_meta_data, created_at, updated_at
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    raw_app_meta_data, raw_user_meta_data, is_super_admin, created_at, updated_at
   ) values 
     ('00000000-0000-0000-0000-000000000000', v_patient_id_3, 'authenticated', 'authenticated',
      'ahmad@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Ahmad Fauzi","phone_number":"08137788990"}'::jsonb, now(), now()),
+     '{"full_name":"Ahmad Fauzi","phone_number":"08137788990"}'::jsonb, false, now(), now()),
     ('00000000-0000-0000-0000-000000000000', v_patient_id_p3, 'authenticated', 'authenticated',
      'pasien3@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '', '', '', '',
      '{"provider":"email","providers":["email"]}'::jsonb,
-     '{"full_name":"Ahmad Fauzi (Pasien 3)","phone_number":"081234567803"}'::jsonb, now(), now());
+     '{"full_name":"Ahmad Fauzi (Pasien 3)","phone_number":"081234567803"}'::jsonb, false, now(), now());
+
+  begin
+    insert into auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    values 
+      (v_patient_id_3, v_patient_id_3, v_patient_id_3::text, jsonb_build_object('sub', v_patient_id_3::text, 'email', 'ahmad@klinik.test', 'email_verified', true), 'email', now(), now(), now()),
+      (v_patient_id_p3, v_patient_id_p3, v_patient_id_p3::text, jsonb_build_object('sub', v_patient_id_p3::text, 'email', 'pasien3@klinik.test', 'email_verified', true), 'email', now(), now(), now())
+    on conflict do nothing;
+  exception when others then
+    null;
+  end;
 
   insert into public.profiles (id, role, full_name, phone_number)
   values 
