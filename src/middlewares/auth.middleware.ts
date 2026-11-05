@@ -5,15 +5,23 @@ import { Jwt } from '../lib/jwt.lib';
 export type TAuthPayload = {
   id: string;
   role: 'ADMIN' | 'STAFF' | 'DOCTOR' | 'PATIENT';
+  email?: string;
+  full_name?: string;
 };
 
-// Baca token dari cookie httpOnly, simpan payload di res.locals.auth
+// Baca token dari cookie httpOnly atau Authorization header (Bearer token)
 export const verifyToken = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
-  const token = req.cookies?.token;
+  const authHeader = req.headers.authorization;
+  const bearerToken =
+    authHeader && authHeader.startsWith('Bearer ')
+      ? authHeader.slice(7).trim()
+      : null;
+  const token = req.cookies?.token || bearerToken;
+
   if (!token) throw new AppError(401, 'Unauthorized');
 
   try {

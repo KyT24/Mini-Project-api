@@ -35,16 +35,17 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateScheduleSchema = exports.scheduleIdSchema = exports.createScheduleSchema = exports.getSchedulesSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
-const boolFromString = z.preprocess((v) => {
-    if (v === 'true' || v === '1')
+const boolFromString = z.preprocess((value) => {
+    if (value === 'true' || value === '1')
         return true;
-    if (v === 'false' || v === '0')
+    if (value === 'false' || value === '0')
         return false;
-    return v;
+    return value;
 }, z.boolean('is_active must be true or false'));
-const id = z.uuid('Schedule id must be a valid uuid');
-const doctor_id = z.uuid('Doctor id must be a valid uuid');
+const id = (0, validators_config_1.uuidValidator)('Schedule id must be a valid uuid');
+const doctor_id = (0, validators_config_1.uuidValidator)('Doctor id must be a valid uuid');
 const day_of_week = z.coerce
     .number('Day must be a number')
     .int('Day must be an integer')
@@ -52,14 +53,16 @@ const day_of_week = z.coerce
     .max(6, 'Day must be between 0 and 6');
 const time = z
     .string('Time is required')
-    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be in HH:mm format');
+    .trim()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'Time must be in HH:mm or HH:mm:ss format')
+    .transform((val) => val.slice(0, 5));
 const patient_quota = z.coerce
     .number('Patient quota must be a number')
     .int('Patient quota must be an integer')
     .min(1, 'Patient quota must be at least 1')
     .max(100, 'Patient quota have maximum 100');
 // "HH:mm" bisa dibandingkan sebagai string
-const endAfterStart = (d) => !d.start_time || !d.end_time || d.end_time > d.start_time;
+const endAfterStart = (data) => !data.start_time || !data.end_time || data.end_time > data.start_time;
 const endAfterStartMessage = { message: 'End time must be after start time' };
 exports.getSchedulesSchema = z.object({
     query: z.object({ doctor_id, is_active: boolFromString.optional() }),
@@ -91,7 +94,7 @@ exports.updateScheduleSchema = z.object({
         is_active: boolFromString.optional(),
     })
         .strict()
-        .refine((data) => Object.values(data).some((v) => v !== undefined), {
+        .refine((data) => Object.values(data).some((value) => value !== undefined), {
         message: 'At least one field must be provided',
     })
         .refine(endAfterStart, endAfterStartMessage),

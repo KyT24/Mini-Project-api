@@ -1,4 +1,5 @@
 import {
+  changePasswordSchema,
   userLoginSchema,
   userRegisterSchema,
 } from '../../validators/auth.validator';
@@ -56,7 +57,7 @@ export class AuthsController {
   }
 
   static async me(req: Request, res: Response) {
-    const user = await AuthsService.me(res.locals.auth.id);
+    const user = await AuthsService.me(res.locals.auth?.id, res.locals.auth);
 
     res.status(200).json({
       success: true,
@@ -71,6 +72,19 @@ export class AuthsController {
     res.status(200).json({
       success: true,
       message: 'User logged out successfully',
+      data: {},
+    });
+  }
+
+  static async changePassword(req: Request, res: Response) {
+    const { body } = validate(changePasswordSchema, { body: req.body });
+    const auth = res.locals.auth;
+
+    await AuthsService.changePassword(auth.id, body, auth);
+
+    res.status(200).json({
+      success: true,
+      message: 'Password berhasil diperbarui',
       data: {},
     });
   }

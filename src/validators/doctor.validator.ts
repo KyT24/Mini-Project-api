@@ -1,4 +1,5 @@
 import * as z from 'zod';
+import { uuidValidator } from './validators.config';
 
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
 const emptyToNull = <T extends z.ZodTypeAny>(schema: T) =>
@@ -27,7 +28,7 @@ const consultation_fee = z
       ),
   );
 
-const id = z.uuid('Doctor id must be a valid uuid');
+const id = uuidValidator('Doctor id must be a valid uuid');
 
 // Data akun login dokter, dibuat bersamaan dengan profil dokter
 const email = z.email('Email is not valid').trim().max(255);
@@ -62,7 +63,7 @@ const photo = emptyToNull(
 ).optional();
 
 const specialist_id = emptyToNull(
-  z.uuid('Specialist id must be a valid uuid').nullable(),
+  uuidValidator('Specialist id must be a valid uuid').nullable(),
 ).optional();
 
 export const createDoctorSchema = z.object({

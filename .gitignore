@@ -9,3 +9,7 @@ node_modules
 skills-lock.json
 CLAUDE.md
 .env.*
+.kilo
+.postman
+postman
+.DS_Store

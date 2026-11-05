@@ -35,17 +35,22 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.updateSpecialistSchema = exports.specialistIdSchema = exports.getSpecialistsSchema = exports.createSpecialistSchema = void 0;
 const z = __importStar(require("zod"));
+const validators_config_1 = require("./validators.config");
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
-const emptyToNull = (schema) => z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), schema);
+const emptyToNull = (schema) => z.preprocess((value) => {
+    if (typeof value === 'string' && value.trim() === '')
+        return null;
+    return value;
+}, schema);
 // "true"/"false" dari query string (z.coerce.boolean menganggap "false" = true)
-const boolFromString = z.preprocess((v) => {
-    if (v === 'true' || v === '1')
+const boolFromString = z.preprocess((value) => {
+    if (value === 'true' || value === '1')
         return true;
-    if (v === 'false' || v === '0')
+    if (value === 'false' || value === '0')
         return false;
-    return v;
+    return value;
 }, z.boolean('is_active must be true or false'));
-const id = z.uuid('Specialist id must be a valid uuid');
+const id = (0, validators_config_1.uuidValidator)('Specialist id must be a valid uuid');
 const name = z
     .string('Name is required')
     .trim()
@@ -79,7 +84,7 @@ exports.updateSpecialistSchema = z.object({
         is_active: boolFromString.optional(),
     })
         .strict()
-        .refine((data) => Object.values(data).some((v) => v !== undefined), {
+        .refine((data) => Object.values(data).some((value) => value !== undefined), {
         message: 'At least one field must be provided',
     }),
 });

@@ -1,0 +1,10 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const server_1 = __importDefault(require("../src/server"));
+// Mendukung baik ES Module maupun CommonJS handler di Vercel Serverless
+exports.default = server_1.default;
+module.exports = server_1.default;
+module.exports.default = server_1.default;

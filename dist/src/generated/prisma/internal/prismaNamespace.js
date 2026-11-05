@@ -48,7 +48,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.TreatmentsScalarFieldEnum = exports.Staff_profilesScalarFieldEnum = exports.Session_queuesScalarFieldEnum = exports.RatingsScalarFieldEnum = exports.Practice_sessionsScalarFieldEnum = exports.Payment_proofsScalarFieldEnum = exports.Patient_profilesScalarFieldEnum = exports.Patient_membershipsScalarFieldEnum = exports.NotificationsScalarFieldEnum = exports.Membership_plansScalarFieldEnum = exports.SpecialistsScalarFieldEnum = exports.Doctor_schedulesScalarFieldEnum = exports.DoctorsScalarFieldEnum = exports.Doctor_treatmentsScalarFieldEnum = exports.Check_insScalarFieldEnum = exports.AppointmentsScalarFieldEnum = exports.UserScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
+exports.defineExtension = exports.NullsOrder = exports.QueryMode = exports.SortOrder = exports.TreatmentsScalarFieldEnum = exports.UserScalarFieldEnum = exports.RatingsScalarFieldEnum = exports.AppointmentsScalarFieldEnum = exports.Practice_sessionsScalarFieldEnum = exports.Doctor_schedulesScalarFieldEnum = exports.DoctorsScalarFieldEnum = exports.SpecialistsScalarFieldEnum = exports.ProfilesScalarFieldEnum = exports.TransactionIsolationLevel = exports.ModelName = exports.AnyNull = exports.JsonNull = exports.DbNull = exports.NullTypes = exports.prismaVersion = exports.getExtensionContext = exports.Decimal = exports.Sql = exports.raw = exports.join = exports.empty = exports.sql = exports.PrismaClientValidationError = exports.PrismaClientInitializationError = exports.PrismaClientRustPanicError = exports.PrismaClientUnknownRequestError = exports.PrismaClientKnownRequestError = void 0;
 const runtime = __importStar(require("@prisma/client/runtime/client"));
 /**
  * Prisma Errors
@@ -103,22 +103,14 @@ exports.JsonNull = runtime.JsonNull;
  */
 exports.AnyNull = runtime.AnyNull;
 exports.ModelName = {
-    user: 'user',
-    appointments: 'appointments',
-    check_ins: 'check_ins',
-    doctor_treatments: 'doctor_treatments',
+    profiles: 'profiles',
+    specialists: 'specialists',
     doctors: 'doctors',
     doctor_schedules: 'doctor_schedules',
-    specialists: 'specialists',
-    membership_plans: 'membership_plans',
-    notifications: 'notifications',
-    patient_memberships: 'patient_memberships',
-    patient_profiles: 'patient_profiles',
-    payment_proofs: 'payment_proofs',
     practice_sessions: 'practice_sessions',
+    appointments: 'appointments',
     ratings: 'ratings',
-    session_queues: 'session_queues',
-    staff_profiles: 'staff_profiles',
+    user: 'user',
     treatments: 'treatments'
 };
 /**
@@ -130,59 +122,34 @@ exports.TransactionIsolationLevel = runtime.makeStrictEnum({
     RepeatableRead: 'RepeatableRead',
     Serializable: 'Serializable'
 });
-exports.UserScalarFieldEnum = {
+exports.ProfilesScalarFieldEnum = {
     id: 'id',
-    email: 'email',
-    full_name: 'full_name',
-    password: 'password',
-    phone_number: 'phone_number',
     role: 'role',
-    profile_picture: 'profile_picture',
+    full_name: 'full_name',
+    phone_number: 'phone_number',
+    avatar_url: 'avatar_url',
+    date_of_birth: 'date_of_birth',
+    gender: 'gender',
+    address: 'address',
+    created_at: 'created_at',
+    updated_at: 'updated_at'
+};
+exports.SpecialistsScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
     is_active: 'is_active',
     created_at: 'created_at',
     updated_at: 'updated_at'
 };
-exports.AppointmentsScalarFieldEnum = {
-    id: 'id',
-    patient_id: 'patient_id',
-    doctor_id: 'doctor_id',
-    session_id: 'session_id',
-    treatment_id: 'treatment_id',
-    patient_membership_id: 'patient_membership_id',
-    appointment_code: 'appointment_code',
-    consultation_fee: 'consultation_fee',
-    treatment_fee: 'treatment_fee',
-    discount_amount: 'discount_amount',
-    total_amount: 'total_amount',
-    status: 'status',
-    payment_deadline: 'payment_deadline',
-    queue_number: 'queue_number',
-    checked_in_at: 'checked_in_at',
-    qr_token: 'qr_token',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
-};
-exports.Check_insScalarFieldEnum = {
-    id: 'id',
-    appointment_id: 'appointment_id',
-    checked_in_by: 'checked_in_by',
-    checked_in_at: 'checked_in_at',
-    status: 'status'
-};
-exports.Doctor_treatmentsScalarFieldEnum = {
-    id: 'id',
-    doctor_id: 'doctor_id',
-    treatment_id: 'treatment_id'
-};
 exports.DoctorsScalarFieldEnum = {
     id: 'id',
-    user_id: 'user_id',
+    specialist_id: 'specialist_id',
     full_name: 'full_name',
     bio: 'bio',
     experience_years: 'experience_years',
     consultation_fee: 'consultation_fee',
-    photo: 'photo',
-    specialist_id: 'specialist_id',
+    photo_url: 'photo_url',
     is_active: 'is_active',
     created_at: 'created_at',
     updated_at: 'updated_at'
@@ -198,73 +165,37 @@ exports.Doctor_schedulesScalarFieldEnum = {
     created_at: 'created_at',
     updated_at: 'updated_at'
 };
-exports.SpecialistsScalarFieldEnum = {
-    id: 'id',
-    name: 'name',
-    description: 'description',
-    is_active: 'is_active',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
-};
-exports.Membership_plansScalarFieldEnum = {
-    id: 'id',
-    name: 'name',
-    description: 'description',
-    price: 'price',
-    duration_days: 'duration_days',
-    discount_percent: 'discount_percent',
-    is_active: 'is_active',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
-};
-exports.NotificationsScalarFieldEnum = {
-    id: 'id',
-    user_id: 'user_id',
-    title: 'title',
-    message: 'message',
-    type: 'type',
-    is_read: 'is_read',
-    sent_at: 'sent_at',
-    created_at: 'created_at'
-};
-exports.Patient_membershipsScalarFieldEnum = {
-    id: 'id',
-    patient_id: 'patient_id',
-    plan_id: 'plan_id',
-    start_date: 'start_date',
-    end_date: 'end_date',
-    price_paid: 'price_paid',
-    status: 'status',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
-};
-exports.Patient_profilesScalarFieldEnum = {
-    id: 'id',
-    user_id: 'user_id',
-    date_of_birth: 'date_of_birth',
-    gender: 'gender',
-    address: 'address',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
-};
-exports.Payment_proofsScalarFieldEnum = {
-    id: 'id',
-    appointment_id: 'appointment_id',
-    image_url: 'image_url',
-    uploaded_at: 'uploaded_at',
-    verified_at: 'verified_at',
-    verified_by: 'verified_by',
-    verification_status: 'verification_status',
-    rejection_reason: 'rejection_reason'
-};
 exports.Practice_sessionsScalarFieldEnum = {
     id: 'id',
     doctor_id: 'doctor_id',
+    schedule_id: 'schedule_id',
     session_date: 'session_date',
     start_time: 'start_time',
     end_time: 'end_time',
+    starts_at: 'starts_at',
+    ends_at: 'ends_at',
     patient_quota: 'patient_quota',
+    current_queue_number: 'current_queue_number',
+    created_at: 'created_at'
+};
+exports.AppointmentsScalarFieldEnum = {
+    id: 'id',
+    code: 'code',
+    patient_id: 'patient_id',
+    doctor_id: 'doctor_id',
+    session_id: 'session_id',
     status: 'status',
+    consultation_fee: 'consultation_fee',
+    payment_deadline: 'payment_deadline',
+    payment_proof_path: 'payment_proof_path',
+    payment_uploaded_at: 'payment_uploaded_at',
+    rejection_reason: 'rejection_reason',
+    confirmed_at: 'confirmed_at',
+    booking_number: 'booking_number',
+    qr_token: 'qr_token',
+    checked_in_at: 'checked_in_at',
+    queue_number: 'queue_number',
+    is_no_show: 'is_no_show',
     created_at: 'created_at',
     updated_at: 'updated_at'
 };
@@ -275,19 +206,17 @@ exports.RatingsScalarFieldEnum = {
     doctor_id: 'doctor_id',
     rating: 'rating',
     review: 'review',
-    created_at: 'created_at',
-    updated_at: 'updated_at'
+    created_at: 'created_at'
 };
-exports.Session_queuesScalarFieldEnum = {
+exports.UserScalarFieldEnum = {
     id: 'id',
-    session_id: 'session_id',
-    current_number: 'current_number',
-    last_queue_number: 'last_queue_number',
-    updated_at: 'updated_at'
-};
-exports.Staff_profilesScalarFieldEnum = {
-    id: 'id',
-    user_id: 'user_id',
+    email: 'email',
+    full_name: 'full_name',
+    password: 'password',
+    phone_number: 'phone_number',
+    role: 'role',
+    profile_picture: 'profile_picture',
+    is_active: 'is_active',
     created_at: 'created_at',
     updated_at: 'updated_at'
 };

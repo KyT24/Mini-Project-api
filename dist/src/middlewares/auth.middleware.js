@@ -12,14 +12,19 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyRole = exports.verifyToken = void 0;
 const app_error_1 = require("../errors/app.error");
 const jwt_lib_1 = require("../lib/jwt.lib");
-// Baca token dari cookie httpOnly, simpan payload di res.locals.auth
+// Baca token dari cookie httpOnly atau Authorization header (Bearer token)
 const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    const token = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token;
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7).trim()
+        : null;
+    const token = ((_a = req.cookies) === null || _a === void 0 ? void 0 : _a.token) || bearerToken;
     if (!token)
         throw new app_error_1.AppError(401, 'Unauthorized');
     try {
-        res.locals.auth = (yield jwt_lib_1.Jwt.verify(token, process.env.JWT_SECRET_KEY));
+        const payload = yield jwt_lib_1.Jwt.verify(token, process.env.JWT_SECRET_KEY);
+        res.locals.auth = payload;
     }
     catch (_b) {
         throw new app_error_1.AppError(401, 'Session expired, please login again');
@@ -28,10 +33,14 @@ const verifyToken = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
 });
 exports.verifyToken = verifyToken;
 // Pakai setelah verifyToken: tolak bila role tidak ada di daftar
-const verifyRole = (...roles) => (req, res, next) => {
-    const auth = res.locals.auth;
-    if (!auth || !roles.includes(auth.role))
-        throw new app_error_1.AppError(403, 'Forbidden');
-    next();
+// Contoh: verifyRole('ADMIN', 'STAFF') → menghasilkan middleware untuk route
+const verifyRole = (...roles) => {
+    return (req, res, next) => {
+        const auth = res.locals.auth;
+        if (!auth || !roles.includes(auth.role)) {
+            throw new app_error_1.AppError(403, 'Forbidden');
+        }
+        next();
+    };
 };
 exports.verifyRole = verifyRole;

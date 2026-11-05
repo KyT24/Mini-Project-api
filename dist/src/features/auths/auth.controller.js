@@ -56,7 +56,8 @@ class AuthsController {
     }
     static me(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            const user = yield auth_service_1.AuthsService.me(res.locals.auth.id);
+            var _a;
+            const user = yield auth_service_1.AuthsService.me((_a = res.locals.auth) === null || _a === void 0 ? void 0 : _a.id, res.locals.auth);
             res.status(200).json({
                 success: true,
                 message: 'User fetched successfully',
@@ -70,6 +71,18 @@ class AuthsController {
             res.status(200).json({
                 success: true,
                 message: 'User logged out successfully',
+                data: {},
+            });
+        });
+    }
+    static changePassword(req, res) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const { body } = (0, validate_1.validate)(auth_validator_1.changePasswordSchema, { body: req.body });
+            const auth = res.locals.auth;
+            yield auth_service_1.AuthsService.changePassword(auth.id, body, auth);
+            res.status(200).json({
+                success: true,
+                message: 'Password berhasil diperbarui',
                 data: {},
             });
         });

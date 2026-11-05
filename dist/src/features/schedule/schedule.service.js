@@ -24,6 +24,7 @@ exports.ScheduleService = void 0;
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
 const time_lib_1 = require("../../lib/time.lib");
+const supabase_lib_1 = require("../../lib/supabase.lib");
 const scheduleOrder = [
     { day_of_week: 'asc' },
     { start_time: 'asc' },
@@ -31,54 +32,251 @@ const scheduleOrder = [
 class ScheduleService {
     static findOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findUnique({ where: { id } });
-            if (!schedule)
-                throw new app_error_1.AppError(404, 'schedule not found');
-            return schedule;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .select('*')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const schedule = yield prisma_client_config_1.prisma.doctor_schedules.findUnique({ where: { id } });
+                if (schedule)
+                    return schedule;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'schedule not found');
         });
     }
     static assertDoctorExists(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
-            if (!doctor)
-                throw new app_error_1.AppError(404, 'doctor not found');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .select('id')
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data)
+                    return;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({ where: { id } });
+                if (doctor)
+                    return;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'doctor not found');
         });
     }
     // Jam praktik di hari yang sama tidak boleh beririsan (jadwal nonaktif ikut dicek
     // agar tidak bentrok saat diaktifkan lagi)
     static assertNoOverlap(doctorId, day, start, end, exceptId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({
-                where: Object.assign({ doctor_id: doctorId, day_of_week: day, start_time: { lt: (0, time_lib_1.toDbTime)(end) }, end_time: { gt: (0, time_lib_1.toDbTime)(start) } }, (exceptId && { NOT: { id: exceptId } })),
-            });
-            if (clash)
-                throw new app_error_1.AppError(409, `schedule overlaps with ${(0, time_lib_1.fromDbTime)(clash.start_time)}-${(0, time_lib_1.fromDbTime)(clash.end_time)}`);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase
+                    .from('doctor_schedules')
+                    .select('*')
+                    .eq('doctor_id', doctorId)
+                    .eq('day_of_week', day)
+                    .lt('start_time', `${end}:00`)
+                    .gt('end_time', `${start}:00`);
+                if (exceptId) {
+                    q = q.neq('id', exceptId);
+                }
+                const { data: clashes } = yield q;
+                if (clashes && clashes.length > 0) {
+                    const clash = clashes[0];
+                    throw new app_error_1.AppError(409, `schedule overlaps with ${(clash.start_time || '').slice(0, 5)}-${(clash.end_time || '').slice(0, 5)}`);
+                }
+                return;
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+            }
+            // Bentrok jika jadwal lain mulai sebelum jadwal ini selesai
+            // dan selesai setelah jadwal ini mulai
+            const where = {
+                doctor_id: doctorId,
+                day_of_week: day,
+                start_time: { lt: (0, time_lib_1.toDbTime)(end) },
+                end_time: { gt: (0, time_lib_1.toDbTime)(start) },
+            };
+            // Saat update, jadwal yang sedang diubah tidak ikut dicek
+            if (exceptId) {
+                where.NOT = { id: exceptId };
+            }
+            try {
+                const clash = yield prisma_client_config_1.prisma.doctor_schedules.findFirst({ where });
+                if (clash) {
+                    throw new app_error_1.AppError(409, `schedule overlaps with ${(0, time_lib_1.fromDbTime)(clash.start_time)}-${(0, time_lib_1.fromDbTime)(clash.end_time)}`);
+                }
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+            }
         });
     }
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { doctor_id, is_active } = query;
-            return yield prisma_client_config_1.prisma.doctor_schedules.findMany({
-                where: Object.assign({ doctor_id }, (is_active !== undefined && { is_active })),
-                orderBy: scheduleOrder,
-            });
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase.from('doctor_schedules').select('*');
+                if (doctor_id)
+                    q = q.eq('doctor_id', doctor_id);
+                if (is_active !== undefined)
+                    q = q.eq('is_active', is_active);
+                q = q.order('day_of_week', { ascending: true }).order('start_time', { ascending: true });
+                const { data, error } = yield q;
+                if (error)
+                    throw error;
+                return (data || []).map((s) => ({
+                    id: s.id,
+                    doctor_id: s.doctor_id,
+                    day_of_week: Number(s.day_of_week),
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    patient_quota: Number(s.patient_quota),
+                    is_active: Boolean(s.is_active),
+                    created_at: s.created_at,
+                    updated_at: s.updated_at,
+                }));
+            }
+            catch (_b) {
+                const where = { doctor_id };
+                if (is_active !== undefined) {
+                    where.is_active = is_active;
+                }
+                return yield prisma_client_config_1.prisma.doctor_schedules.findMany({
+                    where,
+                    orderBy: scheduleOrder,
+                });
+            }
         });
     }
     static create(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
+            var _b;
             const { doctor_id, day_of_week, start_time, end_time } = body, schedule = __rest(body, ["doctor_id", "day_of_week", "start_time", "end_time"]);
             yield this.assertDoctorExists(doctor_id);
             yield this.assertNoOverlap(doctor_id, day_of_week, start_time, end_time);
-            return yield prisma_client_config_1.prisma.doctor_schedules.create({
-                data: Object.assign(Object.assign({}, schedule), { doctor_id,
-                    day_of_week, start_time: (0, time_lib_1.toDbTime)(start_time), end_time: (0, time_lib_1.toDbTime)(end_time) }),
-            });
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .insert({
+                    doctor_id,
+                    day_of_week,
+                    start_time: `${start_time.slice(0, 5)}:00`,
+                    end_time: `${end_time.slice(0, 5)}:00`,
+                    patient_quota: schedule.patient_quota,
+                    is_active: (_b = schedule.is_active) !== null && _b !== void 0 ? _b : true,
+                })
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+                if (error && error.code === '23505') {
+                    throw new app_error_1.AppError(409, 'Doctor already has a schedule at this day and start time');
+                }
+            }
+            catch (e) {
+                if (e instanceof app_error_1.AppError)
+                    throw e;
+                // Prisma fallback
+            }
+            try {
+                return yield prisma_client_config_1.prisma.doctor_schedules.create({
+                    data: Object.assign(Object.assign({}, schedule), { doctor_id,
+                        day_of_week, start_time: (0, time_lib_1.toDbTime)(start_time.slice(0, 5)), end_time: (0, time_lib_1.toDbTime)(end_time.slice(0, 5)) }),
+                });
+            }
+            catch (prismaErr) {
+                if (prismaErr instanceof app_error_1.AppError)
+                    throw prismaErr;
+                throw new app_error_1.AppError(500, 'Gagal menambahkan jadwal dokter');
+            }
         });
     }
     // Sesi yang sudah terbentuk tidak ikut berubah, booking lama tetap berlaku
     static update(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params, body }) {
             var _b, _c, _d;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const updateData = { updated_at: new Date().toISOString() };
+                if (body.day_of_week !== undefined)
+                    updateData.day_of_week = body.day_of_week;
+                if (body.start_time !== undefined)
+                    updateData.start_time = `${body.start_time}:00`;
+                if (body.end_time !== undefined)
+                    updateData.end_time = `${body.end_time}:00`;
+                if (body.patient_quota !== undefined)
+                    updateData.patient_quota = body.patient_quota;
+                if (body.is_active !== undefined)
+                    updateData.is_active = body.is_active;
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .update(updateData)
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return {
+                        id: data.id,
+                        doctor_id: data.doctor_id,
+                        day_of_week: Number(data.day_of_week),
+                        start_time: data.start_time,
+                        end_time: data.end_time,
+                        patient_quota: Number(data.patient_quota),
+                        is_active: Boolean(data.is_active),
+                        created_at: data.created_at,
+                        updated_at: data.updated_at,
+                    };
+                }
+            }
+            catch (_e) {
+                // Prisma fallback
+            }
             const current = yield this.findOrFail(params.id);
             const day = (_b = body.day_of_week) !== null && _b !== void 0 ? _b : current.day_of_week;
             const start = (_c = body.start_time) !== null && _c !== void 0 ? _c : (0, time_lib_1.fromDbTime)(current.start_time);
@@ -87,14 +285,37 @@ class ScheduleService {
                 throw new app_error_1.AppError(422, 'End time must be after start time');
             yield this.assertNoOverlap(current.doctor_id, day, start, end, current.id);
             const { start_time, end_time } = body, schedule = __rest(body, ["start_time", "end_time"]);
+            const data = Object.assign({}, schedule);
+            // Jam hanya diubah jika dikirim, lalu dikonversi ke format kolom DB
+            if (start_time) {
+                data.start_time = (0, time_lib_1.toDbTime)(start_time);
+            }
+            if (end_time) {
+                data.end_time = (0, time_lib_1.toDbTime)(end_time);
+            }
             return yield prisma_client_config_1.prisma.doctor_schedules.update({
                 where: { id: params.id },
-                data: Object.assign(Object.assign(Object.assign({}, schedule), (start_time && { start_time: (0, time_lib_1.toDbTime)(start_time) })), (end_time && { end_time: (0, time_lib_1.toDbTime)(end_time) })),
+                data,
             });
         });
     }
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctor_schedules')
+                    .delete()
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             return yield prisma_client_config_1.prisma.doctor_schedules.delete({ where: { id: params.id } });
         });

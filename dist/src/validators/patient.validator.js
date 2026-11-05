@@ -36,7 +36,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.updatePatientMeSchema = void 0;
 const z = __importStar(require("zod"));
 // "" dari form dianggap null supaya kolom opsional bisa dikosongkan
-const emptyToNull = (schema) => z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? null : v), schema);
+const emptyToNull = (schema) => z.preprocess((value) => {
+    if (typeof value === 'string' && value.trim() === '')
+        return null;
+    return value;
+}, schema);
 const full_name = z
     .string('Full name is required')
     .trim()
@@ -51,7 +55,7 @@ const phone_number = z
 // Format YYYY-MM-DD, tidak boleh di masa depan
 const date_of_birth = emptyToNull(z.iso
     .date('Date of birth must be YYYY-MM-DD')
-    .refine((v) => new Date(v) <= new Date(), {
+    .refine((date) => new Date(date) <= new Date(), {
     message: 'Date of birth cannot be in the future',
 })
     .nullable()).optional();
@@ -69,7 +73,7 @@ exports.updatePatientMeSchema = z.object({
         address,
     })
         .strict()
-        .refine((data) => Object.values(data).some((v) => v !== undefined), {
+        .refine((data) => Object.values(data).some((value) => value !== undefined), {
         message: 'At least one field must be provided',
     }),
 });

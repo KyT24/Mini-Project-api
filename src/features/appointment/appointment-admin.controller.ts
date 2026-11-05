@@ -4,6 +4,7 @@ import {
   appointmentIdSchema,
   getAdminAppointmentsSchema,
   rejectAppointmentSchema,
+  updateAdminAppointmentSchema,
 } from '../../validators/appointment.validator';
 import { validate } from '../../validators/validate';
 import { AppointmentAdminService } from './appointment-admin.service';
@@ -59,6 +60,21 @@ export class AppointmentAdminController {
     res.status(200).json({
       success: true,
       message: 'appointment rejected successfully',
+      data: appointment,
+    });
+  }
+
+  static async updateAppointment(req: Request, res: Response) {
+    const { params, body } = validate(updateAdminAppointmentSchema, {
+      params: req.params,
+      body: req.body,
+    });
+
+    const appointment = await AppointmentAdminService.update({ params, body });
+
+    res.status(200).json({
+      success: true,
+      message: 'appointment updated successfully',
       data: appointment,
     });
   }

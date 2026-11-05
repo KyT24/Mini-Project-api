@@ -10,8 +10,9 @@ exports.appointmentRouter = (0, express_1.Router)();
 const patientOnly = [auth_middleware_1.verifyToken, (0, auth_middleware_1.verifyRole)('PATIENT')];
 exports.appointmentRouter.get('/availability', appointment_controller_1.AppointmentController.getAvailability);
 exports.appointmentRouter.post('/', ...patientOnly, appointment_controller_1.AppointmentController.createAppointment);
-// /me harus didaftarkan sebelum /:id agar tidak dianggap sebagai id
+// /me dan /my harus didaftarkan sebelum /:id agar tidak dianggap sebagai id
 exports.appointmentRouter.get('/me', ...patientOnly, appointment_controller_1.AppointmentController.getMyAppointments);
+exports.appointmentRouter.get('/my', ...patientOnly, appointment_controller_1.AppointmentController.getMyAppointments);
 exports.appointmentRouter.get('/:id', ...patientOnly, appointment_controller_1.AppointmentController.getMyAppointmentById);
 exports.appointmentRouter.patch('/:id/cancel', ...patientOnly, appointment_controller_1.AppointmentController.cancelAppointment);
 exports.appointmentRouter.post('/:id/rating', ...patientOnly, appointment_controller_1.AppointmentController.rateAppointment);

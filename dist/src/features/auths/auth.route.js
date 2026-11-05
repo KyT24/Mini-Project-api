@@ -9,4 +9,5 @@ exports.AuthRouter.post('/register', auth_controller_1.AuthsController.register)
 exports.AuthRouter.post('/admins', auth_middleware_1.verifyToken, (0, auth_middleware_1.verifyRole)('ADMIN'), auth_controller_1.AuthsController.registerAdmin);
 exports.AuthRouter.post('/login', auth_controller_1.AuthsController.login);
 exports.AuthRouter.get('/me', auth_middleware_1.verifyToken, auth_controller_1.AuthsController.me);
+exports.AuthRouter.patch('/password', auth_middleware_1.verifyToken, auth_controller_1.AuthsController.changePassword);
 exports.AuthRouter.post('/logout', auth_controller_1.AuthsController.logout);

@@ -5,8 +5,15 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "tsc",
-    "start": "node dist/server.js",
+    "build": "prisma generate && tsc",
+    "start": "node dist/src/server.js",
+    "postinstall": "prisma generate",
+    "db:init": "tsx src/scripts/db-init.ts",
+    "db:seed": "tsx src/scripts/seed.ts",
+    "db:clear": "tsx src/scripts/db-clear.ts",
+    "db:reset-schedules": "tsx src/scripts/reset-schedules.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "clear": "tsx src/scripts/db-clear.ts",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
     "seed:treatments": "tsx src/scripts/seed-treatments.ts"
   },

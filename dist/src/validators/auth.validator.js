@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.userLoginSchema = exports.userRegisterSchema = void 0;
+exports.changePasswordSchema = exports.userLoginSchema = exports.userRegisterSchema = void 0;
 const z = __importStar(require("zod"));
 const email = z.email().trim().min(1, 'Email is required field');
 const full_name = z
@@ -61,5 +61,14 @@ exports.userLoginSchema = z.object({
     body: z.object({
         email,
         password,
+    }),
+});
+exports.changePasswordSchema = z.object({
+    body: z.object({
+        current_password: z.string().min(1, 'Password saat ini wajib diisi'),
+        new_password: z
+            .string()
+            .min(8, 'Password baru minimal 8 karakter')
+            .max(72, 'Password memiliki maksimal 72 karakter'),
     }),
 });

@@ -16,7 +16,8 @@ const patient_service_1 = require("./patient.service");
 class PatientController {
     static getMe(req, res) {
         return __awaiter(this, void 0, void 0, function* () {
-            const patient = yield patient_service_1.PatientService.getMe(res.locals.auth.id);
+            const auth = res.locals.auth;
+            const patient = yield patient_service_1.PatientService.getMe(auth.id, auth.email);
             res.status(200).json({
                 success: true,
                 message: 'patient profile retrieved successfully',

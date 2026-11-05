@@ -24,19 +24,9 @@ exports.DoctorService = void 0;
 const crypto_1 = require("crypto");
 const prisma_client_config_1 = require("../../configs/prisma-client.config");
 const app_error_1 = require("../../errors/app.error");
-const bcrypt_lib_1 = require("../../lib/bcrypt.lib");
 const supabase_lib_1 = require("../../lib/supabase.lib");
 const appointment_constants_1 = require("../appointment/appointment.constants");
 const doctorInclude = {
-    users: {
-        select: {
-            id: true,
-            email: true,
-            full_name: true,
-            phone_number: true,
-            profile_picture: true,
-        },
-    },
     specialists: { select: { id: true, name: true } },
     // Jadwal aktif untuk kartu & profil dokter
     doctor_schedules: {
@@ -60,144 +50,432 @@ const orderBy = {
 class DoctorService {
     static findOrFail(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({
-                where: { id },
-                include: doctorInclude,
-            });
-            if (!doctor)
-                throw new app_error_1.AppError(404, 'doctor not found');
-            return doctor;
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .select(`
+          *,
+          specialists:specialist_id(id, name, description),
+          doctor_schedules(*)
+        `)
+                    .eq('id', id)
+                    .maybeSingle();
+                if (!error && data)
+                    return data;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const doctor = yield prisma_client_config_1.prisma.doctors.findUnique({
+                    where: { id },
+                    include: doctorInclude,
+                });
+                if (doctor)
+                    return doctor;
+            }
+            catch (_b) {
+                // Ignore Prisma connection error
+            }
+            throw new app_error_1.AppError(404, 'doctor not found');
         });
     }
     static assertSpecialistExists(specialistId) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!specialistId)
                 return;
-            const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
-                where: { id: specialistId },
-            });
-            if (!specialist)
-                throw new app_error_1.AppError(404, 'specialist not found');
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('specialists')
+                    .select('id')
+                    .eq('id', specialistId)
+                    .maybeSingle();
+                if (!error && data)
+                    return;
+            }
+            catch (_a) {
+                // Prisma fallback
+            }
+            try {
+                const specialist = yield prisma_client_config_1.prisma.specialists.findUnique({
+                    where: { id: specialistId },
+                });
+                if (specialist)
+                    return;
+            }
+            catch (_b) {
+                // Ignore Prisma error
+            }
+            throw new app_error_1.AppError(404, 'specialist not found');
         });
     }
     static create(_a) {
         return __awaiter(this, arguments, void 0, function* ({ body }) {
-            const { email, phone_number, password, specialist_id } = body, doctor = __rest(body, ["email", "phone_number", "password", "specialist_id"]);
-            const findUserByEmail = yield prisma_client_config_1.prisma.user.findUnique({ where: { email } });
-            if (findUserByEmail)
-                throw new app_error_1.AppError(409, 'email already registered');
-            const findUserByPhone = yield prisma_client_config_1.prisma.user.findUnique({
-                where: { phone_number },
-            });
-            if (findUserByPhone)
-                throw new app_error_1.AppError(409, 'phone number already registered');
+            var _b, _c;
+            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .insert({
+                    full_name: doctor.full_name,
+                    bio: doctor.bio,
+                    experience_years: doctor.experience_years,
+                    consultation_fee: doctor.consultation_fee,
+                    photo_url: doctor.photo || doctor.photo_url || null,
+                    specialist_id: specialist_id || null,
+                    is_active: (_b = doctor.is_active) !== null && _b !== void 0 ? _b : true,
+                })
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_d) {
+                // Prisma fallback
+            }
             yield this.assertSpecialistExists(specialist_id);
-            const hashedPassword = yield bcrypt_lib_1.Bcrypt.hashPassword(password);
-            // Nested create: user + doctor dibuat dalam satu transaksi,
-            // bila salah satu gagal keduanya batal
-            return yield prisma_client_config_1.prisma.doctors.create({
-                data: Object.assign(Object.assign(Object.assign({}, doctor), (specialist_id && { specialists: { connect: { id: specialist_id } } })), { users: {
-                        create: {
-                            email,
-                            phone_number,
-                            full_name: doctor.full_name,
-                            password: hashedPassword,
-                            role: 'DOCTOR',
-                        },
-                    } }),
-                include: doctorInclude,
-            });
+            const data = {
+                full_name: doctor.full_name,
+                bio: doctor.bio,
+                experience_years: doctor.experience_years,
+                consultation_fee: doctor.consultation_fee,
+                photo_url: doctor.photo || doctor.photo_url || null,
+                is_active: (_c = doctor.is_active) !== null && _c !== void 0 ? _c : true,
+            };
+            // Spesialis opsional: hanya dihubungkan jika dipilih
+            if (specialist_id) {
+                data.specialists = { connect: { id: specialist_id } };
+            }
+            return yield prisma_client_config_1.prisma.doctors.create({ data, include: doctorInclude });
         });
     }
     static getAll(_a) {
         return __awaiter(this, arguments, void 0, function* ({ query }) {
             const { page, limit, search, is_active, specialist_id, min_fee, max_fee, day_of_week, sort, } = query;
-            const where = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (is_active !== undefined && { is_active })), (specialist_id && { specialist_id })), (search && {
-                full_name: { contains: search, mode: 'insensitive' },
-            })), ((min_fee !== undefined || max_fee !== undefined) && {
-                consultation_fee: Object.assign(Object.assign({}, (min_fee !== undefined && { gte: min_fee })), (max_fee !== undefined && { lte: max_fee })),
-            })), (day_of_week !== undefined && {
-                doctor_schedules: { some: { day_of_week, is_active: true } },
-            }));
-            const [doctors, total] = yield Promise.all([
-                prisma_client_config_1.prisma.doctors.findMany({
-                    where,
-                    include: doctorInclude,
-                    orderBy: orderBy[sort],
-                    skip: (page - 1) * limit,
-                    take: limit,
-                }),
-                prisma_client_config_1.prisma.doctors.count({ where }),
-            ]);
-            return {
-                doctors,
-                meta: { page, limit, total, total_pages: Math.ceil(total / limit) },
-            };
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                let q = supabase
+                    .from('doctors')
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*), ratings(*)', {
+                    count: 'exact',
+                });
+                if (is_active !== undefined)
+                    q = q.eq('is_active', is_active);
+                if (specialist_id)
+                    q = q.eq('specialist_id', specialist_id);
+                if (search)
+                    q = q.ilike('full_name', `%${search}%`);
+                if (min_fee !== undefined)
+                    q = q.gte('consultation_fee', min_fee);
+                if (max_fee !== undefined)
+                    q = q.lte('consultation_fee', max_fee);
+                if (sort === 'fee_asc')
+                    q = q.order('consultation_fee', { ascending: true });
+                else if (sort === 'fee_desc')
+                    q = q.order('consultation_fee', { ascending: false });
+                else if (sort === 'experience_desc')
+                    q = q.order('experience_years', { ascending: false });
+                else
+                    q = q.order('created_at', { ascending: false });
+                const from = (page - 1) * limit;
+                const to = from + limit - 1;
+                const { data, count, error } = yield q.range(from, to);
+                if (error)
+                    throw error;
+                let filtered = data || [];
+                if (day_of_week !== undefined) {
+                    filtered = filtered.filter((d) => {
+                        var _a;
+                        return (_a = d.doctor_schedules) === null || _a === void 0 ? void 0 : _a.some((s) => s.is_active && Number(s.day_of_week) === day_of_week);
+                    });
+                }
+                const doctors = filtered.map((d) => {
+                    const schedules = (d.doctor_schedules || [])
+                        .filter((s) => s.is_active)
+                        .map((s) => ({
+                        id: s.id,
+                        day_of_week: Number(s.day_of_week),
+                        start_time: s.start_time,
+                        end_time: s.end_time,
+                        patient_quota: Number(s.patient_quota),
+                    }))
+                        .sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time));
+                    const ratings = Array.isArray(d.ratings) ? d.ratings : [];
+                    const ratingCount = ratings.length;
+                    const ratingSum = ratings.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+                    const ratingAvg = ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(1)) : null;
+                    return {
+                        id: d.id,
+                        user_id: d.id,
+                        full_name: d.full_name,
+                        bio: d.bio,
+                        experience_years: Number(d.experience_years) || 0,
+                        consultation_fee: d.consultation_fee,
+                        photo: d.photo_url || d.photo || null,
+                        photo_url: d.photo_url || d.photo || null,
+                        specialist_id: d.specialist_id,
+                        is_active: Boolean(d.is_active),
+                        created_at: d.created_at,
+                        updated_at: d.updated_at,
+                        users: {
+                            id: d.id,
+                            email: '',
+                            full_name: d.full_name,
+                            phone_number: null,
+                            profile_picture: d.photo_url || d.photo || null,
+                        },
+                        specialists: d.specialists
+                            ? { id: d.specialists.id, name: d.specialists.name }
+                            : null,
+                        doctor_schedules: schedules,
+                        rating_avg: ratingAvg,
+                        rating_count: ratingCount,
+                    };
+                });
+                const total = count || doctors.length;
+                return {
+                    doctors,
+                    meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+                };
+            }
+            catch (_b) {
+                // Filter hanya ditambahkan jika diisi dari query
+                const where = {};
+                if (is_active !== undefined) {
+                    where.is_active = is_active;
+                }
+                if (specialist_id) {
+                    where.specialist_id = specialist_id;
+                }
+                if (search) {
+                    where.full_name = { contains: search, mode: 'insensitive' };
+                }
+                // Rentang biaya: gte = minimal, lte = maksimal (undefined diabaikan Prisma)
+                if (min_fee !== undefined || max_fee !== undefined) {
+                    where.consultation_fee = { gte: min_fee, lte: max_fee };
+                }
+                // Dokter yang punya jadwal aktif di hari tersebut
+                if (day_of_week !== undefined) {
+                    where.doctor_schedules = { some: { day_of_week, is_active: true } };
+                }
+                const [doctors, total] = yield Promise.all([
+                    prisma_client_config_1.prisma.doctors.findMany({
+                        where,
+                        include: doctorInclude,
+                        orderBy: orderBy[sort],
+                        skip: (page - 1) * limit,
+                        take: limit,
+                    }),
+                    prisma_client_config_1.prisma.doctors.count({ where }),
+                ]);
+                return {
+                    doctors,
+                    meta: { page, limit, total, total_pages: Math.ceil(total / limit) || 1 },
+                };
+            }
         });
     }
     // Unggah foto lalu kembalikan URL; disimpan ke dokter lewat create/update
-    static uploadPhoto(file) {
+    static uploadPhoto(file, imageBase64) {
         return __awaiter(this, void 0, void 0, function* () {
-            if (!file)
+            if (!file && !imageBase64)
                 throw new app_error_1.AppError(422, 'Photo image is required');
-            const extension = file.mimetype.split('/')[1];
-            const url = yield supabase_lib_1.Storage.upload(`doctors/${Date.now()}-${(0, crypto_1.randomBytes)(4).toString('hex')}.${extension}`, file);
-            return { url };
+            const bucket = supabase_lib_1.Storage.getDoctorPhotosBucket();
+            const randomPart = (0, crypto_1.randomBytes)(4).toString('hex');
+            let url;
+            if (file) {
+                const extension = file.mimetype.split('/')[1] || 'png';
+                const fileName = `doctors/${Date.now()}-${randomPart}.${extension}`;
+                url = yield supabase_lib_1.Storage.upload(fileName, file, bucket);
+            }
+            else {
+                const fileName = `doctors/${Date.now()}-${randomPart}.jpg`;
+                url = yield supabase_lib_1.Storage.uploadBase64(fileName, imageBase64, bucket);
+            }
+            return { url, photo_url: url };
         });
     }
     // Profil dokter + ringkasan rating & ulasan terbaru
     static getById(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
-            const where = { doctor_id: params.id };
-            const [doctor, summary, reviews] = yield Promise.all([
-                this.findOrFail(params.id),
-                prisma_client_config_1.prisma.ratings.aggregate({ where, _avg: { rating: true }, _count: { rating: true } }),
-                // Nama pasien dikirim penuh, frontend hanya menampilkan nama depan
-                prisma_client_config_1.prisma.ratings.findMany({
-                    where,
-                    orderBy: { created_at: 'desc' },
-                    take: appointment_constants_1.LATEST_REVIEWS_LIMIT,
-                    select: {
-                        id: true,
-                        rating: true,
-                        review: true,
-                        created_at: true,
-                        patient_profiles: { select: { users: { select: { full_name: true } } } },
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data: d, error } = yield supabase
+                    .from('doctors')
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*), ratings(*)')
+                    .eq('id', params.id)
+                    .single();
+                if (error || !d)
+                    throw error || new Error('doctor not found');
+                const schedules = (d.doctor_schedules || [])
+                    .filter((s) => s.is_active)
+                    .map((s) => ({
+                    id: s.id,
+                    day_of_week: Number(s.day_of_week),
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    patient_quota: Number(s.patient_quota),
+                }))
+                    .sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time));
+                const ratings = Array.isArray(d.ratings) ? d.ratings : [];
+                const ratingCount = ratings.length;
+                const ratingSum = ratings.reduce((sum, r) => sum + (Number(r.rating) || 0), 0);
+                const ratingAvg = ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(1)) : null;
+                return {
+                    id: d.id,
+                    user_id: d.id,
+                    full_name: d.full_name,
+                    bio: d.bio,
+                    experience_years: Number(d.experience_years) || 0,
+                    consultation_fee: d.consultation_fee,
+                    photo: d.photo_url || d.photo || null,
+                    photo_url: d.photo_url || d.photo || null,
+                    specialist_id: d.specialist_id,
+                    is_active: Boolean(d.is_active),
+                    created_at: d.created_at,
+                    updated_at: d.updated_at,
+                    users: {
+                        id: d.id,
+                        email: '',
+                        full_name: d.full_name,
+                        phone_number: null,
+                        profile_picture: d.photo_url || d.photo || null,
                     },
-                }),
-            ]);
-            const avg = summary._avg.rating;
-            return Object.assign(Object.assign({}, doctor), { rating_avg: avg === null ? null : Number(avg.toFixed(1)), rating_count: summary._count.rating, reviews });
+                    specialists: d.specialists
+                        ? { id: d.specialists.id, name: d.specialists.name }
+                        : null,
+                    doctor_schedules: schedules,
+                    rating_avg: ratingAvg,
+                    rating_count: ratingCount,
+                    reviews: ratings.map((r) => ({
+                        id: r.id,
+                        rating: r.rating,
+                        review: r.review,
+                        created_at: r.created_at,
+                        patient_profiles: { users: { full_name: 'Pasien' } },
+                    })),
+                };
+            }
+            catch (_b) {
+                const where = { doctor_id: params.id };
+                const [doctor, summary, reviews] = yield Promise.all([
+                    this.findOrFail(params.id),
+                    prisma_client_config_1.prisma.ratings.aggregate({ where, _avg: { rating: true }, _count: { rating: true } }),
+                    // Nama pasien dikirim penuh, frontend hanya menampilkan nama depan
+                    prisma_client_config_1.prisma.ratings.findMany({
+                        where,
+                        orderBy: { created_at: 'desc' },
+                        take: appointment_constants_1.LATEST_REVIEWS_LIMIT,
+                        select: {
+                            id: true,
+                            rating: true,
+                            review: true,
+                            created_at: true,
+                            profiles: { select: { full_name: true } },
+                        },
+                    }),
+                ]);
+                // Rata-rata rating dibulatkan 1 angka di belakang koma, null jika belum ada rating
+                const avg = summary._avg.rating;
+                let ratingAvg = null;
+                if (avg !== null) {
+                    ratingAvg = Number(avg.toFixed(1));
+                }
+                return Object.assign(Object.assign({}, doctor), { rating_avg: ratingAvg, rating_count: summary._count.rating, reviews: reviews.map((r) => {
+                        var _a, _b;
+                        return ({
+                            id: r.id,
+                            rating: r.rating,
+                            review: r.review,
+                            created_at: r.created_at,
+                            patient_profiles: { users: { full_name: (_b = (_a = r.profiles) === null || _a === void 0 ? void 0 : _a.full_name) !== null && _b !== void 0 ? _b : 'Pasien' } },
+                        });
+                    }) });
+            }
         });
     }
     static update(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params, body }) {
+            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const updateData = { updated_at: new Date().toISOString() };
+                if (doctor.full_name !== undefined)
+                    updateData.full_name = doctor.full_name;
+                if (doctor.bio !== undefined)
+                    updateData.bio = doctor.bio;
+                if (doctor.experience_years !== undefined)
+                    updateData.experience_years = doctor.experience_years;
+                if (doctor.consultation_fee !== undefined)
+                    updateData.consultation_fee = doctor.consultation_fee;
+                if (doctor.photo || doctor.photo_url)
+                    updateData.photo_url = doctor.photo || doctor.photo_url;
+                if (doctor.is_active !== undefined)
+                    updateData.is_active = doctor.is_active;
+                if (specialist_id !== undefined)
+                    updateData.specialist_id = specialist_id;
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .update(updateData)
+                    .eq('id', params.id)
+                    .select('*, specialists:specialist_id(id, name), doctor_schedules(*)')
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             yield this.assertSpecialistExists(body.specialist_id);
-            const { specialist_id } = body, doctor = __rest(body, ["specialist_id"]);
+            const data = Object.assign(Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({}, (doctor.full_name ? { full_name: doctor.full_name } : {})), (doctor.bio !== undefined ? { bio: doctor.bio } : {})), (doctor.experience_years !== undefined ? { experience_years: doctor.experience_years } : {})), (doctor.consultation_fee !== undefined ? { consultation_fee: doctor.consultation_fee } : {})), ((doctor.photo || doctor.photo_url) ? { photo_url: doctor.photo || doctor.photo_url } : {})), (doctor.is_active !== undefined ? { is_active: doctor.is_active } : {}));
+            // Spesialis: id = hubungkan, null = lepaskan, undefined = tidak diubah
+            if (specialist_id !== undefined) {
+                if (specialist_id) {
+                    data.specialists = { connect: { id: specialist_id } };
+                }
+                else {
+                    data.specialists = { disconnect: true };
+                }
+            }
             return yield prisma_client_config_1.prisma.doctors.update({
                 where: { id: params.id },
-                data: Object.assign(Object.assign(Object.assign({}, doctor), (specialist_id !== undefined && {
-                    specialists: specialist_id
-                        ? { connect: { id: specialist_id } }
-                        : { disconnect: true },
-                })), (body.full_name && {
-                    users: { update: { full_name: body.full_name } },
-                })),
+                data,
                 include: doctorInclude,
             });
         });
     }
     static delete(_a) {
         return __awaiter(this, arguments, void 0, function* ({ params }) {
+            try {
+                const supabase = (0, supabase_lib_1.getSupabaseClient)();
+                const { data, error } = yield supabase
+                    .from('doctors')
+                    .delete()
+                    .eq('id', params.id)
+                    .select()
+                    .single();
+                if (!error && data) {
+                    return data;
+                }
+            }
+            catch (_b) {
+                // Prisma fallback
+            }
             yield this.findOrFail(params.id);
             const [appointments, sessions, ratings] = yield Promise.all([
                 prisma_client_config_1.prisma.appointments.count({ where: { doctor_id: params.id } }),
                 prisma_client_config_1.prisma.practice_sessions.count({ where: { doctor_id: params.id } }),
                 prisma_client_config_1.prisma.ratings.count({ where: { doctor_id: params.id } }),
             ]);
-            if (appointments || sessions || ratings)
+            if (appointments || sessions || ratings) {
                 throw new app_error_1.AppError(409, 'doctor still has appointments, sessions, or ratings; deactivate instead');
+            }
             return yield prisma_client_config_1.prisma.doctors.delete({ where: { id: params.id } });
         });
     }
