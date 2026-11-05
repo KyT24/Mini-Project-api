@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
+    "postinstall": "prisma generate --config prisma7.config.ts",
     "build": "tsc",
     "start": "node dist/server.js",
     "seed:admin": "tsx src/scripts/seed-admin.ts",
