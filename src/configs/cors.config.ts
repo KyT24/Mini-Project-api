@@ -12,9 +12,11 @@ export const corsOptions: CorsOptions = {
 
     /*
       IF ORIGIN NOT INSIDE ALLOWED_ORIGIN
+      Request tanpa Origin (curl, Postman, buka URL langsung) tetap diizinkan
     */
     if (
-      !ALLOWED_ORIGINS?.includes(origin!) &&
+      origin &&
+      !ALLOWED_ORIGINS?.includes(origin) &&
         process.env.NODE_ENV === 'PRODUCTION'
       ) 
 
