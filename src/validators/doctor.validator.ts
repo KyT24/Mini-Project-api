@@ -61,8 +61,17 @@ const photo = emptyToNull(
   z.string().trim().max(255, 'Photo have maximum 255 characters').nullable(),
 ).optional();
 
-const specialist_id = emptyToNull(
-  z.uuid('Specialist id must be a valid uuid').nullable(),
+// Sama dengan categories di Mini-Project-app/src/constants/treatments.ts
+const DOCTOR_CATEGORIES = [
+  'Acne & Scar',
+  'Brightening',
+  'Anti-Aging',
+  'Hair',
+  'Slimming',
+] as const;
+
+const category = emptyToNull(
+  z.enum(DOCTOR_CATEGORIES, 'Category is not valid').nullable(),
 ).optional();
 
 export const createDoctorSchema = z.object({
@@ -75,7 +84,7 @@ export const createDoctorSchema = z.object({
     experience_years: experience_years.default(0),
     consultation_fee: consultation_fee.default('0'),
     photo,
-    specialist_id,
+    category,
     is_active: boolFromString.default(true),
   }),
 });
@@ -88,7 +97,7 @@ export const getDoctorsSchema = z.object({
     limit: z.coerce.number().int().min(1).max(100).default(10),
     search: z.string().trim().max(150).optional(),
     is_active: boolFromString.optional(), 
-    specialist_id: z.uuid().optional(),
+    category: z.enum(DOCTOR_CATEGORIES).optional(),
     min_fee: z.coerce.number('min_fee must be a number').min(0).optional(),
     max_fee: z.coerce.number('max_fee must be a number').min(0).optional(),
     // 0 = Minggu ... 6 = Sabtu
@@ -117,7 +126,7 @@ export const updateDoctorSchema = z.object({
       experience_years: experience_years.optional(),
       consultation_fee: consultation_fee.optional(),
       photo,
-      specialist_id,
+      category,
       is_active: boolFromString.optional(),
     })
     .strict()

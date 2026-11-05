@@ -22,7 +22,6 @@ const doctorInclude = {
       profile_picture: true,
     },
   },
-  specialists: { select: { id: true, name: true } },
   // Jadwal aktif untuk kartu & profil dokter
   doctor_schedules: {
     where: { is_active: true },
@@ -56,16 +55,8 @@ export class DoctorService {
     return doctor;
   }
 
-  private static async assertSpecialistExists(specialistId?: string | null) {
-    if (!specialistId) return;
-    const specialist = await prisma.specialists.findUnique({
-      where: { id: specialistId },
-    });
-    if (!specialist) throw new AppError(404, 'specialist not found');
-  }
-
   static async create({ body }: createDoctorRequest) {
-    const { email, phone_number, password, specialist_id, ...doctor } = body;
+    const { email, phone_number, password, ...doctor } = body;
 
     const findUserByEmail = await prisma.user.findUnique({ where: { email } });
     if (findUserByEmail) throw new AppError(409, 'email already registered');
@@ -76,8 +67,6 @@ export class DoctorService {
     if (findUserByPhone) {
       throw new AppError(409, 'phone number already registered');
     }
-
-    await this.assertSpecialistExists(specialist_id);
 
     const hashedPassword = await Bcrypt.hashPassword(password);
 
@@ -96,11 +85,6 @@ export class DoctorService {
       },
     };
 
-    // Spesialis opsional: hanya dihubungkan jika dipilih
-    if (specialist_id) {
-      data.specialists = { connect: { id: specialist_id } };
-    }
-
     return await prisma.doctors.create({ data, include: doctorInclude });
   }
 
@@ -110,7 +94,7 @@ export class DoctorService {
       limit,
       search,
       is_active,
-      specialist_id,
+      category,
       min_fee,
       max_fee,
       day_of_week,
@@ -123,8 +107,8 @@ export class DoctorService {
     if (is_active !== undefined) {
       where.is_active = is_active;
     }
-    if (specialist_id) {
-      where.specialist_id = specialist_id;
+    if (category) {
+      where.category = category;
     }
     if (search) {
       where.full_name = { contains: search, mode: 'insensitive' };
@@ -207,20 +191,8 @@ export class DoctorService {
 
   static async update({ params, body }: updateDoctorRequest) {
     await this.findOrFail(params.id);
-    await this.assertSpecialistExists(body.specialist_id);
 
-    const { specialist_id, ...doctor } = body;
-
-    const data: Prisma.doctorsUpdateInput = { ...doctor };
-
-    // Spesialis: id = hubungkan, null = lepaskan, undefined = tidak diubah
-    if (specialist_id !== undefined) {
-      if (specialist_id) {
-        data.specialists = { connect: { id: specialist_id } };
-      } else {
-        data.specialists = { disconnect: true };
-      }
-    }
+    const data: Prisma.doctorsUpdateInput = { ...body };
 
     // Nama di akun user ikut diperbarui agar tetap sama
     if (body.full_name) {
