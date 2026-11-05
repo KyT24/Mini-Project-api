@@ -18,14 +18,15 @@ exports.corsOptions = {
             .map((o) => o.trim().replace(/\/$/, ''))
             .filter(Boolean);
         const cleanOrigin = origin.replace(/\/$/, '');
-        // 3. Izinkan domain yang terdaftar secara eksplisit
-        if (allowedOrigins.includes(cleanOrigin)) {
+        // 3. Izinkan domain yang terdaftar secara eksplisit atau wildcard *
+        if (allowedOrigins.includes('*') || allowedOrigins.includes(cleanOrigin)) {
             return callback(null, true);
         }
         // 4. Izinkan otomatis seluruh domain deployment Vercel (*.vercel.app) dan localhost
-        if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.includes('localhost')) {
+        if (cleanOrigin.endsWith('.vercel.app') || cleanOrigin.includes('localhost') || cleanOrigin.includes('127.0.0.1')) {
             return callback(null, true);
         }
-        return callback(new Error('Origin not allowed by CORS'), false);
+        // Menolak origin tanpa melempar runtime exception unhandled error
+        return callback(null, false);
     },
 };

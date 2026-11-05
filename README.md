@@ -19,9 +19,10 @@ Built with **Node.js**, **Express 5**, **TypeScript**, **Prisma ORM 7 (PostgreSQ
   - [Prerequisites](#prerequisites)
   - [1. Environment Configuration](#1-environment-configuration)
   - [2. Installation](#2-installation)
-  - [3. Generate Prisma Client](#3-generate-prisma-client)
-  - [4. Running the Application](#4-running-the-application)
-  - [5. Verification & Testing](#5-verification--testing)
+  - [3. Database Setup (Initialization & Seeding)](#3-database-setup-initialization--seeding)
+  - [4. Database Reset & Clear Workflow](#4-database-reset--clear-workflow)
+  - [5. Running the Application](#5-running-the-application)
+  - [6. Verification & Testing](#6-verification--testing)
   - [Demo Accounts](#demo-accounts)
 - [API Reference](#api-reference)
   - [Authentication (`/api/v1/auth`)](#authentication-apiv1auth)
@@ -151,19 +152,187 @@ api-clinic-appointment/
 
 ## 🗄 Database Schema & Models
 
-The PostgreSQL database managed by Prisma contains the following core entities:
+The PostgreSQL database managed by Prisma and Supabase contains the following core tables, custom types, and Row-Level Security (RLS) policies:
 
-- **`user`**: Base account credentials, role (`PATIENT`, `ADMIN`, `STAFF`, `DOCTOR`), status, and profile picture.
-- **`patient_profiles`**: Additional metadata (date of birth, gender, address) linked to a `user`.
-- **`doctors`**: Doctor biographical data, experience, consultation fee, avatar, and relation to `specialists`.
-- **`specialists`**: Medical branches (e.g., Dermatologist, General Practitioner).
-- **`doctor_schedules`**: Weekly recurring slots per doctor with quota per session.
-- **`practice_sessions`**: Concrete date instances generated when a booking occurs for a scheduled date.
-- **`treatments`**: Procedures/services offered (e.g., Acne Dermapeel, Laser CO2, Glow Peeling).
-- **`appointments`**: Central booking records tracking fees, discounts, queue number, QR token, and status.
-- **`payment_proofs`**: Payment slip image URLs, verification status (`pending`, `approved`, `rejected`), rejection reasons, and reviewer tracking.
-- **`ratings`**: Star ratings (1-5) and written feedback for doctors.
-- **`membership_plans` & `patient_memberships`**: Membership discounting engine.
+## Table `profiles`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `role` | `user_role` |  |
+| `full_name` | `text` |  |
+| `phone_number` | `text` | Nullable |
+| `avatar_url` | `text` | Nullable |
+| `date_of_birth` | `date` | Nullable |
+| `gender` | `gender` | Nullable |
+| `address` | `text` | Nullable |
+| `created_at` | `timestamptz` |  |
+| `updated_at` | `timestamptz` |  |
+
+## Table `specialists`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `name` | `text` | Unique |
+| `description` | `text` | Nullable |
+| `is_active` | `bool` |  |
+| `created_at` | `timestamptz` |  |
+| `updated_at` | `timestamptz` |  |
+
+## Table `doctors`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `specialist_id` | `uuid` | Nullable |
+| `full_name` | `text` |  |
+| `bio` | `text` | Nullable |
+| `experience_years` | `int4` |  |
+| `consultation_fee` | `numeric` |  |
+| `photo_url` | `text` | Nullable |
+| `is_active` | `bool` |  |
+| `created_at` | `timestamptz` |  |
+| `updated_at` | `timestamptz` |  |
+
+## Table `doctor_schedules`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `doctor_id` | `uuid` |  |
+| `day_of_week` | `int2` |  |
+| `start_time` | `time` |  |
+| `end_time` | `time` |  |
+| `patient_quota` | `int4` |  |
+| `is_active` | `bool` |  |
+| `created_at` | `timestamptz` |  |
+| `updated_at` | `timestamptz` |  |
+
+## Table `practice_sessions`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `doctor_id` | `uuid` |  |
+| `schedule_id` | `uuid` | Nullable |
+| `session_date` | `date` |  |
+| `start_time` | `time` |  |
+| `end_time` | `time` |  |
+| `starts_at` | `timestamptz` |  |
+| `ends_at` | `timestamptz` |  |
+| `patient_quota` | `int4` |  |
+| `current_queue_number` | `int4` |  |
+| `created_at` | `timestamptz` |  |
+
+## Table `appointments`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `code` | `text` | Unique |
+| `patient_id` | `uuid` |  |
+| `doctor_id` | `uuid` |  |
+| `session_id` | `uuid` |  |
+| `status` | `transaction_status` |  |
+| `consultation_fee` | `numeric` |  |
+| `payment_deadline` | `timestamptz` |  |
+| `payment_proof_path` | `text` | Nullable |
+| `payment_uploaded_at` | `timestamptz` | Nullable |
+| `rejection_reason` | `text` | Nullable |
+| `confirmed_at` | `timestamptz` | Nullable |
+| `booking_number` | `int4` | Nullable |
+| `qr_token` | `uuid` | Nullable Unique |
+| `checked_in_at` | `timestamptz` | Nullable |
+| `queue_number` | `int4` | Nullable |
+| `is_no_show` | `bool` |  |
+| `created_at` | `timestamptz` |  |
+| `updated_at` | `timestamptz` |  |
+
+## Table `ratings`
+
+### Columns
+
+| Name | Type | Constraints |
+|------|------|-------------|
+| `id` | `uuid` | Primary |
+| `appointment_id` | `uuid` | Unique |
+| `patient_id` | `uuid` |  |
+| `doctor_id` | `uuid` |  |
+| `rating` | `int2` |  |
+| `review` | `text` | Nullable |
+| `created_at` | `timestamptz` |  |
+
+## Custom Types / Enums
+
+### `user_role`
+`patient` | `admin`
+
+### `gender`
+`male` | `female` | `other`
+
+### `transaction_status`
+`waiting_payment` | `waiting_confirmation` | `done` | `rejected` | `expired` | `canceled`
+
+## RLS Policies
+
+### `profiles`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `profiles: baca milik sendiri atau admin` | SELECT | authenticated | PERMISSIVE | `((id = auth.uid()) OR is_admin())` | — |
+| `profiles: ubah milik sendiri atau admin` | UPDATE | authenticated | PERMISSIVE | `((id = auth.uid()) OR is_admin())` | `((id = auth.uid()) OR is_admin())` |
+
+### `specialists`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `specialists: publik baca` | SELECT | anon, authenticated | PERMISSIVE | `true` | — |
+| `specialists: admin kelola` | ALL | authenticated | PERMISSIVE | `is_admin()` | `is_admin()` |
+
+### `doctors`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `doctors: publik baca` | SELECT | anon, authenticated | PERMISSIVE | `true` | — |
+| `doctors: admin kelola` | ALL | authenticated | PERMISSIVE | `is_admin()` | `is_admin()` |
+
+### `doctor_schedules`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `schedules: publik baca` | SELECT | anon, authenticated | PERMISSIVE | `true` | — |
+| `schedules: admin kelola` | ALL | authenticated | PERMISSIVE | `is_admin()` | `is_admin()` |
+
+### `practice_sessions`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `sessions: publik baca` | SELECT | anon, authenticated | PERMISSIVE | `true` | — |
+
+### `appointments`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `appointments: baca milik sendiri atau admin` | SELECT | authenticated | PERMISSIVE | `((patient_id = auth.uid()) OR is_admin())` | — |
+
+### `ratings`
+
+| Policy | Command | Roles | Action | USING | WITH CHECK |
+|--------|---------|-------|--------|-------|------------|
+| `ratings: publik baca` | SELECT | anon, authenticated | PERMISSIVE | `true` | — |
 
 ### Transaction Status Lifecycle
 
@@ -194,16 +363,18 @@ cp example.env .env
 | `NODE_ENV` | Application environment (`DEVELOPMENT` or `PRODUCTION`) | `DEVELOPMENT` |
 | `PORT` | HTTP server port | `8000` |
 | `API_PREFIX` | Prefix for all API endpoints | `/api/v1` |
-| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `http://localhost:3000` |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins or `*` | `http://localhost:3000` |
 | `DATABASE_URL` | PostgreSQL connection string (Prisma pooled URL) | `postgresql://user:pass@host:5432/postgres` |
-| `DIRECT_URL` | Direct connection string for Prisma migrations | `postgresql://user:pass@host:5432/postgres` |
+| `DIRECT_URL` | Direct connection string for DDL migrations & scripts | `postgresql://user:pass@host:5432/postgres` |
 | `JWT_SECRET_KEY` | Secret string for signing JWT tokens | `openssl rand -hex 32` |
 | `SUPABASE_URL` | Supabase project URL | `https://xxxx.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (backend only) | `eyJhbGciOi...` |
-| `SUPABASE_BUCKET` | Public storage bucket name | `payment-proofs` |
-| `ADMIN_EMAIL` | Default admin email for seeding | `admin@klinik.com` |
-| `ADMIN_PASSWORD` | Default admin password (min 8 chars) | `SuperSecretPassword123` |
-| `ADMIN_FULL_NAME` | Default admin display name | `Admin Klinik` |
+| `SUPABASE_ANON_KEY` | Supabase anon/publishable key | `eyJhbGciOi...` |
+| `SUPABASE_BUCKET_DOCTOR_PHOTOS` | Public storage bucket for doctor avatars | `doctor-photos` |
+| `SUPABASE_BUCKET_PAYMENT_PROOFS` | Storage bucket for payment receipts | `payment-proofs` |
+| `ADMIN_EMAIL` | Default admin email for seeding | `admin@klinik.test` |
+| `ADMIN_PASSWORD` | Default admin password (min 8 chars) | `Admin123!` |
+| `ADMIN_FULL_NAME` | Default admin display name | `Admin Utama Klinik Estetika` |
 | `ADMIN_PHONE` | Default admin phone number | `081234567890` |
 
 ---
@@ -212,7 +383,7 @@ cp example.env .env
 
 ### Prerequisites
 - **Node.js** v18 or higher (v20+ recommended)
-- **PostgreSQL** database (Local instance or Supabase Project)
+- **PostgreSQL** database (Local instance via Docker/Postgres or Supabase Cloud)
 - **Supabase Project** (Storage bucket & shared authentication database)
 
 ---
@@ -224,11 +395,11 @@ Duplicate `example.env` into `.env`:
 cp example.env .env
 ```
 
-Ensure the values in `.env` match your Supabase project (sesuai yang digunakan oleh frontend `clinic-appointment-platform`):
+Ensure the values in `.env` match your Supabase project (selaras dengan yang digunakan oleh frontend `clinic-appointment-platform`):
 
 ```env
 # ---------- Application ----------
-NODE_ENV='DEVELOPMENT'
+NODE_ENV=DEVELOPMENT
 PORT=8000
 API_PREFIX=/api/v1
 ALLOWED_ORIGINS=http://localhost:3000
@@ -243,7 +414,9 @@ JWT_SECRET_KEY=94c502da5df3890f666f358ad7d9ba66723b7b4a20b0ddf5170d47aa28f747eb
 # ---------- Supabase Project & Storage ----------
 SUPABASE_URL=https://wewieruvgvxupjndagnb.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=sb_publishable_zdn0kiwPWaQXJciMAhVjFg_VbsdN6Eg
-SUPABASE_BUCKET=payment-proofs
+SUPABASE_ANON_KEY=sb_publishable_zdn0kiwPWaQXJciMAhVjFg_VbsdN6Eg
+SUPABASE_BUCKET_DOCTOR_PHOTOS=doctor-photos
+SUPABASE_BUCKET_PAYMENT_PROOFS=payment-proofs
 ```
 
 ---
@@ -257,22 +430,79 @@ npm install
 
 ---
 
-### 3. Generate Prisma Client
-Generate the type-safe Prisma Client bindings:
+### 3. Database Setup (Initialization & Seeding)
+
+Jika Anda menghubungkan database baru atau memulai dari awal (*fresh install*), ikuti langkah berikut:
+
+#### 3.1 Inisialisasi Skema Database (`db:init`)
+Jalankan script inisialisasi DDL untuk membuat seluruh tabel, ENUM, ekstensi, fungsi RPC Supabase, trigger, dan policy Row-Level Security:
+
+```bash
+npm run db:init
+```
+
+> **Catatan Teknis**: Script ini mengeksekusi file SQL [`prisma/init-database.sql`](prisma/init-database.sql) yang secara otomatis membuat:
+> - Ekstensi PostgreSQL (`uuid-ossp`, `pgcrypto`)
+> - 5 ENUM database (`user_role`, `gender`, `transaction_status`, `checkin_status`, `role`)
+> - Seluruh tabel relasional (`user`, `patient_profiles`, `doctors`, `specialists`, `doctor_schedules`, `practice_sessions`, `treatments`, `appointments`, `payment_proofs`, `ratings`, dll.)
+> - Fungsi RPC Supabase (`check_in`, `call_next`, `mark_no_show`, `approve_appointment`, `reject_appointment`)
+
+#### 3.2 Generate Prisma Client
+Kompilasi schema Prisma agar TypeScript memiliki tipe data model terbaru:
 
 ```bash
 npx prisma generate
 ```
 
-*(Opsional bila menggunakan database PostgreSQL lokal)*:
+#### 3.3 Inisialisasi Data Awal & Dummy (`db:seed`)
+Isi database dengan data master (layanan treatments, spesialis, dokter, jadwal) serta data simulasi transaksi antrean:
+
 ```bash
-# Jalankan migrasi schema jika menggunakan database PostgreSQL lokal
-npx prisma migrate dev
+npm run db:seed
+# atau: npm run seed
 ```
 
 ---
 
-### 4. Running the Application
+### 4. Database Reset & Clear Workflow
+
+Jika Anda ingin mengosongkan database atau memulai siklus pengujian dari awal:
+
+#### 4.1 Mengosongkan Database (`db:clear`)
+Jalankan perintah clear untuk menghapus seluruh data pada tabel relasional:
+
+```bash
+npm run db:clear
+# atau: npm run clear
+```
+
+Script ini membersihkan seluruh data secara aman menggunakan `TRUNCATE ... CASCADE` (semua tabel janji temu, riwayat pembayaran, sesi praktik, dokter, dan user akan dikosongkan).
+
+#### 4.2 Apa yang Harus Dilakukan Setelah Menjalankan `db:clear`?
+
+Setelah database dibersihkan, pilih salah satu alur sesuai kebutuhan Anda:
+
+- **Alur A: Isi Kembali dengan Full Dummy Dataset (Recommended untuk Dev/Testing)**  
+  Jika Anda ingin langsung melanjutkan pengujian fitur antrean, verifikasi pembayaran admin, dan riwayat pasien:
+  ```bash
+  npm run db:seed
+  ```
+  *Ini akan mengisi ulang seluruh data master dan akun demo (`admin@klinik.test` & `pasien@klinik.test`).*
+
+- **Alur B: Database Bersih / Clean Operational Setup (Tanpa Transaksi Dummy)**  
+  Jika Anda ingin mulai dari kondisi bersih (hanya akun admin dan master layanan treatments, tanpa dokter dan tanpa janji temu dummy):
+  ```bash
+  # 1. Buat akun Admin pertama berdasarkan variabel .env
+  npm run seed:admin
+
+  # 2. Isi data master katalog layanan perawatan (14 treatments resmi)
+  npm run seed:treatments
+  ```
+  *Setelah itu, login sebagai admin untuk mendaftarkan dokter, spesialis, dan jadwal praktik secara manual via antarmuka dashboard admin.*
+
+---
+
+### 5. Running the Application
 
 Anda dapat menjalankan backend ini dalam dua mode:
 
@@ -302,7 +532,7 @@ Base API siap diakses pada: `http://localhost:8000/api/v1`.
 
 ---
 
-### 5. Verification & Testing
+### 6. Verification & Testing
 
 Untuk memastikan server berjalan dan dapat berkomunikasi dengan database:
 
