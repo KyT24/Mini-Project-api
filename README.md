@@ -432,65 +432,83 @@ npm install
 
 ### 3. Database Setup (Initialization & Seeding)
 
-Jika Anda menghubungkan database baru atau memulai dari awal (*fresh install*), ikuti langkah berikut:
+Jika Anda menghubungkan database baru atau memulai dari awal (*fresh install*), Anda dapat memilih salah satu dari **2 metode** berikut:
 
-#### 3.1 Inisialisasi Skema Database (`db:init`)
-Jalankan script inisialisasi DDL untuk membuat seluruh tabel, ENUM, ekstensi, fungsi RPC Supabase, trigger, dan policy Row-Level Security:
+---
 
-```bash
-npm run db:init
-```
+#### 🟢 Cara 1: Manual Copy-Paste via SQL Editor (Supabase Cloud / DBeaver / pgAdmin)
+> **Paling direkomendasikan** jika Anda menggunakan Supabase Cloud atau tidak menyalakan Docker/PostgreSQL lokal di laptop Anda:
 
-> **Catatan Teknis**: Script ini mengeksekusi file SQL [`prisma/init-database.sql`](prisma/init-database.sql) yang secara otomatis membuat:
-> - Ekstensi PostgreSQL (`uuid-ossp`, `pgcrypto`)
-> - 5 ENUM database (`user_role`, `gender`, `transaction_status`, `checkin_status`, `role`)
-> - Seluruh tabel relasional (`user`, `patient_profiles`, `doctors`, `specialists`, `doctor_schedules`, `practice_sessions`, `treatments`, `appointments`, `payment_proofs`, `ratings`, dll.)
-> - Fungsi RPC Supabase (`check_in`, `call_next`, `mark_no_show`, `approve_appointment`, `reject_appointment`)
+1. Buka [Supabase Dashboard](https://supabase.com/dashboard) → Pilih project Anda → Buka menu **SQL Editor** (ikon `>_` di panel kiri) → Klik **New Query**.
+2. **Inisialisasi Skema & Data Awal**:
+   - Buka file [`prisma/init-database.sql`](prisma/init-database.sql) di VS Code.
+   - Salin seluruh isinya (`Cmd+A` / `Ctrl+A` lalu `Cmd+C` / `Ctrl+C`).
+   - Tempel (*paste*) ke Supabase SQL Editor dan klik **Run** (atau `Cmd+Enter`).
+3. **Kompilasi Prisma Client** di terminal backend:
+   ```bash
+   npx prisma generate
+   ```
 
-#### 3.2 Generate Prisma Client
-Kompilasi schema Prisma agar TypeScript memiliki tipe data model terbaru:
+---
 
-```bash
-npx prisma generate
-```
+#### 🔵 Cara 2: Otomatis via Terminal (NPM Scripts)
+> Digunakan jika database lokal Docker atau connection string di `.env` sudah terhubung aktif:
 
-#### 3.3 Inisialisasi Data Awal & Dummy (`db:seed`)
-Isi database dengan data master (layanan treatments, spesialis, dokter, jadwal) serta data simulasi transaksi antrean:
+1. **Inisialisasi Skema Database (`db:init`)**:
+   ```bash
+   npm run db:init
+   ```
+   *Script ini mengeksekusi [`prisma/init-database.sql`](prisma/init-database.sql) secara otomatis via Node.js.*
 
-```bash
-npm run db:seed
-# atau: npm run seed
-```
+2. **Generate Prisma Client**:
+   ```bash
+   npx prisma generate
+   ```
+
+3. **Inisialisasi Data Awal & Dummy (`db:seed`)**:
+   ```bash
+   npm run db:seed
+   # atau: npm run seed
+   ```
 
 ---
 
 ### 4. Database Reset & Clear Workflow
 
-Jika Anda ingin mengosongkan database atau memulai siklus pengujian dari awal:
+Jika Anda ingin mengosongkan database atau me-reset siklus pengujian dari awal:
 
-#### 4.1 Mengosongkan Database (`db:clear`)
-Jalankan perintah clear untuk menghapus seluruh data pada tabel relasional:
+#### 4.1 Mengosongkan Database (`db:clear` / `clear.sql`)
 
-```bash
-npm run db:clear
-# atau: npm run clear
-```
+Pilih salah satu cara berikut untuk mengosongkan seluruh tabel relasional:
 
-Script ini membersihkan seluruh data secara aman menggunakan `TRUNCATE ... CASCADE` (semua tabel janji temu, riwayat pembayaran, sesi praktik, dokter, dan user akan dikosongkan).
+- **Cara Manual (Copy-Paste SQL Editor)**:
+  Buka file [`prisma/clear.sql`](prisma/clear.sql), salin seluruh isinya, lalu *paste* & *Run* di Supabase SQL Editor.
+- **Cara Terminal (NPM Scripts)**:
+  ```bash
+  npm run db:clear
+  # atau: npm run clear
+  ```
 
-#### 4.2 Apa yang Harus Dilakukan Setelah Menjalankan `db:clear`?
+> Script pembersih ini menjalankan perintah `TRUNCATE TABLE ... CASCADE` yang mengosongkan tabel janji temu, antrean, sesi praktik, dokter, dan user demo secara aman tanpa merusak struktur skema tabel.
+
+---
+
+#### 4.2 Apa yang Harus Dilakukan Setelah Menjalankan Clear?
 
 Setelah database dibersihkan, pilih salah satu alur sesuai kebutuhan Anda:
 
-- **Alur A: Isi Kembali dengan Full Dummy Dataset (Recommended untuk Dev/Testing)**  
-  Jika Anda ingin langsung melanjutkan pengujian fitur antrean, verifikasi pembayaran admin, dan riwayat pasien:
-  ```bash
-  npm run db:seed
-  ```
+- **Alur A: Isi Kembali dengan Full Dummy Dataset (Recommended untuk Dev & Testing)**  
+  Jika Anda ingin langsung melanjutkan pengujian antrean, verifikasi pembayaran admin, dan riwayat pasien:
+  - **Manual via SQL Editor**: Buka file [`prisma/seed.sql`](prisma/seed.sql), salin seluruh isinya, lalu *paste* & *Run* di Supabase SQL Editor.
+  - **Atau via Terminal**:
+    ```bash
+    npm run db:seed
+    # atau: npm run seed
+    ```
   *Ini akan mengisi ulang seluruh data master dan akun demo (`admin@klinik.test` & `pasien@klinik.test`).*
 
 - **Alur B: Database Bersih / Clean Operational Setup (Tanpa Transaksi Dummy)**  
-  Jika Anda ingin mulai dari kondisi bersih (hanya akun admin dan master layanan treatments, tanpa dokter dan tanpa janji temu dummy):
+  Jika Anda ingin mulai dari kondisi bersih (hanya akun admin dan master katalog treatments, tanpa dokter dan tanpa janji temu dummy):
   ```bash
   # 1. Buat akun Admin pertama berdasarkan variabel .env
   npm run seed:admin
