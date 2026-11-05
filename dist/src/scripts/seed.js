@@ -52,10 +52,10 @@ function main() {
             console.log('Rincian data yang tersedia:');
             console.log('  1. Akun Pengguna & Pasien:');
             console.log('     - Admin Utama   : admin@klinik.test (Password: Admin123!)');
-            console.log('     - Pasien Demo 1 : pasien@klinik.test (Password: Pasien123!) [Budi Demo]');
-            console.log('     - Pasien Demo 2 : siti@klinik.test (Password: Pasien123!) [Siti Rahayu]');
-            console.log('     - Pasien Demo 3 : ahmad@klinik.test (Password: Pasien123!) [Ahmad Fauzi]');
-            console.log('     - Pasien Demo 4 : clara@klinik.test (Password: Pasien123!) [Clara Valentine]');
+            console.log('     - Pasien 1      : pasien1@klinik.test / pasien@klinik.test (Password: Pasien123!) [Budi Demo]');
+            console.log('     - Pasien 2      : pasien2@klinik.test / siti@klinik.test (Password: Pasien123!) [Siti Rahayu]');
+            console.log('     - Pasien 3      : pasien3@klinik.test / ahmad@klinik.test (Password: Pasien123!) [Ahmad Fauzi]');
+            console.log('     - Pasien 4      : clara@klinik.test (Password: Pasien123!) [Clara Valentine]');
             console.log('  2. Master Data:');
             console.log('     - 5 Spesialisasi Medis Estetika');
             console.log('     - 6 Dokter Klinik Kecantikan');

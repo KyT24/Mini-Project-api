@@ -28,7 +28,22 @@
     },
     {
       "key": "patient_email",
-      "value": "pasien@klinik.test",
+      "value": "pasien1@klinik.test",
+      "type": "string"
+    },
+    {
+      "key": "patient1_email",
+      "value": "pasien1@klinik.test",
+      "type": "string"
+    },
+    {
+      "key": "patient2_email",
+      "value": "pasien2@klinik.test",
+      "type": "string"
+    },
+    {
+      "key": "patient3_email",
+      "value": "pasien3@klinik.test",
       "type": "string"
     },
     {

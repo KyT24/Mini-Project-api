@@ -25,12 +25,14 @@ Dokumentasi resmi REST API Express.js untuk sistem janji temu klinik estetika, t
 
 ## 🔑 Akun Demo Pengujian
 
-Gunakan akun berikut yang sudah disediakan di seed data:
+Gunakan akun berikut yang sudah disediakan di skema dan seed data:
 
 | Role | Email | Password | Keterangan & Hak Akses |
 | :--- | :--- | :--- | :--- |
 | **ADMIN** | `admin@klinik.test` | `Admin123!` | Akses penuh: manajemen dokter/jadwal/spesialis, persetujuan pembayaran, check-in pasien di klinik, panggil antrean, dashboard analitik |
-| **PATIENT** | `pasien@klinik.test` | `Pasien123!` | Buat janji temu dokter, upload bukti transfer pembayaran, lihat profil, batalkan booking, beri ulasan |
+| **PATIENT 1** | `pasien1@klinik.test`<br>*(alias: `pasien@klinik.test`)* | `Pasien123!` | Akun Pasien 1 (Budi Demo): Buat janji temu dokter, upload bukti transfer, riwayat transaksi antrean |
+| **PATIENT 2** | `pasien2@klinik.test`<br>*(alias: `siti@klinik.test`)* | `Pasien123!` | Akun Pasien 2 (Siti Rahayu): Buat janji temu dokter, upload bukti transfer, pengujian antrean multi-user |
+| **PATIENT 3** | `pasien3@klinik.test`<br>*(alias: `ahmad@klinik.test`)* | `Pasien123!` | Akun Pasien 3 (Ahmad Fauzi): Buat janji temu dokter, upload bukti transfer, pengujian antrean multi-user |
 
 ---
 

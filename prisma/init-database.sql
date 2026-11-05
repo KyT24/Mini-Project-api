@@ -1059,8 +1059,11 @@ do $$
 declare
   v_admin_id       uuid := 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa';
   v_patient_id     uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb';
+  v_patient_id_p1  uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb01';
   v_patient_id_2   uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbb2';
+  v_patient_id_p2  uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb02';
   v_patient_id_3   uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbb3';
+  v_patient_id_p3  uuid := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb03';
 
   v_sp_dve         uuid := '11111111-0000-0000-0000-000000000001';
   v_sp_aaam        uuid := '11111111-0000-0000-0000-000000000002';
@@ -1151,63 +1154,78 @@ begin
   values (v_admin_id, 'admin', 'Admin Utama Klinik Estetika', '081234567890')
   on conflict (id) do update set role = 'admin', full_name = 'Admin Utama Klinik Estetika';
 
-  -- B. Pasien Demo Budi
-  delete from auth.users where id = v_patient_id or email = 'pasien@klinik.test';
+  -- B. Pasien Demo Budi (pasien@klinik.test & pasien1@klinik.test)
+  delete from auth.users where id in (v_patient_id, v_patient_id_p1) or email in ('pasien@klinik.test', 'pasien1@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-  ) values (
-    '00000000-0000-0000-0000-000000000000', v_patient_id, 'authenticated', 'authenticated',
-    'pasien@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
-    '{"provider":"email","providers":["email"]}'::jsonb,
-    '{"full_name":"Budi Pasien Demo","phone_number":"08123456789"}'::jsonb,
-    now(), now()
-  );
+  ) values 
+    ('00000000-0000-0000-0000-000000000000', v_patient_id, 'authenticated', 'authenticated',
+     'pasien@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Budi Pasien Demo","phone_number":"08123456789"}'::jsonb, now(), now()),
+    ('00000000-0000-0000-0000-000000000000', v_patient_id_p1, 'authenticated', 'authenticated',
+     'pasien1@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Budi Pasien Satu Demo","phone_number":"081234567801"}'::jsonb, now(), now());
 
   insert into public.profiles (id, role, full_name, phone_number)
-  values (v_patient_id, 'patient', 'Budi Pasien Demo', '08123456789')
-  on conflict (id) do update set role = 'patient', full_name = 'Budi Pasien Demo';
+  values 
+    (v_patient_id, 'patient', 'Budi Pasien Demo', '08123456789'),
+    (v_patient_id_p1, 'patient', 'Budi Pasien Satu Demo', '081234567801')
+  on conflict (id) do update set role = 'patient', full_name = excluded.full_name;
 
-  -- C. Pasien Demo Siti
-  delete from auth.users where id = v_patient_id_2 or email = 'siti@klinik.test';
+  -- C. Pasien Demo Siti (siti@klinik.test & pasien2@klinik.test)
+  delete from auth.users where id in (v_patient_id_2, v_patient_id_p2) or email in ('siti@klinik.test', 'pasien2@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-  ) values (
-    '00000000-0000-0000-0000-000000000000', v_patient_id_2, 'authenticated', 'authenticated',
-    'siti@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
-    '{"provider":"email","providers":["email"]}'::jsonb,
-    '{"full_name":"Siti Rahayu","phone_number":"08129988776"}'::jsonb,
-    now(), now()
-  );
+  ) values 
+    ('00000000-0000-0000-0000-000000000000', v_patient_id_2, 'authenticated', 'authenticated',
+     'siti@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Siti Rahayu","phone_number":"08129988776"}'::jsonb, now(), now()),
+    ('00000000-0000-0000-0000-000000000000', v_patient_id_p2, 'authenticated', 'authenticated',
+     'pasien2@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Siti Rahayu (Pasien 2)","phone_number":"081234567802"}'::jsonb, now(), now());
 
   insert into public.profiles (id, role, full_name, phone_number)
-  values (v_patient_id_2, 'patient', 'Siti Rahayu', '08129988776')
-  on conflict (id) do update set role = 'patient', full_name = 'Siti Rahayu';
+  values 
+    (v_patient_id_2, 'patient', 'Siti Rahayu', '08129988776'),
+    (v_patient_id_p2, 'patient', 'Siti Rahayu (Pasien 2)', '081234567802')
+  on conflict (id) do update set role = 'patient', full_name = excluded.full_name;
 
-  -- D. Pasien Demo Ahmad
-  delete from auth.users where id = v_patient_id_3 or email = 'ahmad@klinik.test';
+  -- D. Pasien Demo Ahmad (ahmad@klinik.test & pasien3@klinik.test)
+  delete from auth.users where id in (v_patient_id_3, v_patient_id_p3) or email in ('ahmad@klinik.test', 'pasien3@klinik.test');
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-  ) values (
-    '00000000-0000-0000-0000-000000000000', v_patient_id_3, 'authenticated', 'authenticated',
-    'ahmad@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
-    '{"provider":"email","providers":["email"]}'::jsonb,
-    '{"full_name":"Ahmad Fauzi","phone_number":"08137788990"}'::jsonb,
-    now(), now()
-  );
+  ) values 
+    ('00000000-0000-0000-0000-000000000000', v_patient_id_3, 'authenticated', 'authenticated',
+     'ahmad@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Ahmad Fauzi","phone_number":"08137788990"}'::jsonb, now(), now()),
+    ('00000000-0000-0000-0000-000000000000', v_patient_id_p3, 'authenticated', 'authenticated',
+     'pasien3@klinik.test', crypt('Pasien123!', gen_salt('bf')), now(),
+     '{"provider":"email","providers":["email"]}'::jsonb,
+     '{"full_name":"Ahmad Fauzi (Pasien 3)","phone_number":"081234567803"}'::jsonb, now(), now());
 
   insert into public.profiles (id, role, full_name, phone_number)
-  values (v_patient_id_3, 'patient', 'Ahmad Fauzi', '08137788990')
-  on conflict (id) do update set role = 'patient', full_name = 'Ahmad Fauzi';
+  values 
+    (v_patient_id_3, 'patient', 'Ahmad Fauzi', '08137788990'),
+    (v_patient_id_p3, 'patient', 'Ahmad Fauzi (Pasien 3)', '081234567803')
+  on conflict (id) do update set role = 'patient', full_name = excluded.full_name;
 
   -- Sinkronkan ke tabel public.users untuk autentikasi Express lokal
   insert into public.users (id, email, full_name, phone_number, password, role, is_active) values
     (v_admin_id::text, 'admin@klinik.test', 'Admin Utama Klinik Estetika', '081234567890', crypt('Admin123!', gen_salt('bf')), 'ADMIN', true),
     (v_patient_id::text, 'pasien@klinik.test', 'Budi Pasien Demo', '08123456789', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true),
+    (v_patient_id_p1::text, 'pasien1@klinik.test', 'Budi Pasien Satu Demo', '081234567801', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true),
     (v_patient_id_2::text, 'siti@klinik.test', 'Siti Rahayu', '08129988776', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true),
-    (v_patient_id_3::text, 'ahmad@klinik.test', 'Ahmad Fauzi', '08137788990', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true)
+    (v_patient_id_p2::text, 'pasien2@klinik.test', 'Siti Rahayu (Pasien 2)', '081234567802', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true),
+    (v_patient_id_3::text, 'ahmad@klinik.test', 'Ahmad Fauzi', '08137788990', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true),
+    (v_patient_id_p3::text, 'pasien3@klinik.test', 'Ahmad Fauzi (Pasien 3)', '081234567803', crypt('Pasien123!', gen_salt('bf')), 'PATIENT', true)
   on conflict (id) do update set role = excluded.role, full_name = excluded.full_name;
 
   -- 5. Sesi Praktik Hari Ini & 7 Hari ke Depan

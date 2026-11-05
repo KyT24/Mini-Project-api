@@ -22,6 +22,9 @@ BEGIN
     DELETE FROM auth.users WHERE email IN (
       'admin@klinik.test',
       'pasien@klinik.test',
+      'pasien1@klinik.test',
+      'pasien2@klinik.test',
+      'pasien3@klinik.test',
       'siti@klinik.test',
       'ahmad@klinik.test',
       'clara@klinik.test'

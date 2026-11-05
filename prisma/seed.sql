@@ -236,8 +236,11 @@ DO $$
 DECLARE
   v_admin_id     UUID := 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa';
   v_patient_id_1 UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb';
+  v_p1_alias     UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb01';
   v_patient_id_2 UUID := 'bbbbbbbb-2222-2222-2222-cccccccccccc';
+  v_p2_alias     UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb02';
   v_patient_id_3 UUID := 'bbbbbbbb-2222-2222-2222-dddddddddddd';
+  v_p3_alias     UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbb03';
   v_patient_id_4 UUID := 'bbbbbbbb-2222-2222-2222-eeeeeeeeeeee';
   v_pw_hash      VARCHAR(255) := crypt('Admin123!', gen_salt('bf'));
   v_pw_hash_user VARCHAR(255) := crypt('Pasien123!', gen_salt('bf'));
@@ -365,6 +368,35 @@ BEGIN
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
   VALUES (v_patient_id_4, 'clara@klinik.test', 'Clara Valentine', '081288991122', v_pw_hash_user, 'PATIENT')
+  ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
+
+  -- F. Explicit Testing Accounts: pasien1@klinik.test, pasien2@klinik.test, pasien3@klinik.test
+  INSERT INTO auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES 
+    ('00000000-0000-0000-0000-000000000000', v_p1_alias, 'authenticated', 'authenticated', 'pasien1@klinik.test', v_pw_hash_user, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Budi Pasien Satu Demo","phone_number":"081234567801"}'::jsonb, NOW(), NOW()),
+    ('00000000-0000-0000-0000-000000000000', v_p2_alias, 'authenticated', 'authenticated', 'pasien2@klinik.test', v_pw_hash_user, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Siti Rahayu (Pasien 2)","phone_number":"081234567802"}'::jsonb, NOW(), NOW()),
+    ('00000000-0000-0000-0000-000000000000', v_p3_alias, 'authenticated', 'authenticated', 'pasien3@klinik.test', v_pw_hash_user, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Ahmad Fauzi (Pasien 3)","phone_number":"081234567803"}'::jsonb, NOW(), NOW())
+  ON CONFLICT (id) DO UPDATE SET encrypted_password = EXCLUDED.encrypted_password, raw_user_meta_data = EXCLUDED.raw_user_meta_data;
+
+  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  VALUES 
+    (v_p1_alias::text, v_p1_alias, v_p1_alias::text, format('{"sub":"%s","email":"pasien1@klinik.test"}', v_p1_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
+    (v_p2_alias::text, v_p2_alias, v_p2_alias::text, format('{"sub":"%s","email":"pasien2@klinik.test"}', v_p2_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
+    (v_p3_alias::text, v_p3_alias, v_p3_alias::text, format('{"sub":"%s","email":"pasien3@klinik.test"}', v_p3_alias)::jsonb, 'email', NOW(), NOW(), NOW())
+  ON CONFLICT (provider, id) DO NOTHING;
+
+  INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
+  VALUES 
+    (v_p1_alias, 'pasien1@klinik.test', 'Budi Pasien Satu Demo', '081234567801', 'patient', '1995-08-17', 'male', 'Jl. Senopati No. 45, Jakarta Selatan'),
+    (v_p2_alias, 'pasien2@klinik.test', 'Siti Rahayu (Pasien 2)', '081234567802', 'patient', '1998-03-24', 'female', 'Jl. Gandaria I No. 12, Kebayoran Baru, Jakarta Selatan'),
+    (v_p3_alias, 'pasien3@klinik.test', 'Ahmad Fauzi (Pasien 3)', '081234567803', 'patient', '1992-11-10', 'male', 'Jl. Tebet Barat Dalam No. 8, Jakarta Selatan')
+  ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'patient';
+
+  INSERT INTO public.users (id, email, full_name, phone_number, password, role)
+  VALUES 
+    (v_p1_alias, 'pasien1@klinik.test', 'Budi Pasien Satu Demo', '081234567801', v_pw_hash_user, 'PATIENT'),
+    (v_p2_alias, 'pasien2@klinik.test', 'Siti Rahayu (Pasien 2)', '081234567802', v_pw_hash_user, 'PATIENT'),
+    (v_p3_alias, 'pasien3@klinik.test', 'Ahmad Fauzi (Pasien 3)', '081234567803', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 END $$;
 

@@ -571,12 +571,14 @@ curl -s -X POST http://localhost:8000/api/v1/auth/login \
 
 ### 👥 Demo Accounts
 
-Database bersama telah dilengkapi dengan akun demo siap pakai:
+Database bersama telah dilengkapi dengan akun demo siap pakai untuk pengujian multi-user:
 
 | Role | Email | Password | Akses & Wewenang |
 | :--- | :--- | :--- | :--- |
 | **ADMIN** | `admin@klinik.test` | `Admin123!` | Akses admin klinik, verifikasi bukti bayar, QR check-in hari H, panggil antrean (*call next*), dashboard statistik |
-| **PATIENT** | `pasien@klinik.test` | `Pasien123!` | Akses pasien, booking jadwal konsultasi, upload struk pembayaran, melihat antrean aktif & ulasan |
+| **PATIENT 1** | `pasien1@klinik.test`<br>*(alias: `pasien@klinik.test`)* | `Pasien123!` | Pasien 1 (Budi Demo): Booking jadwal konsultasi, upload struk pembayaran, melihat antrean aktif & ulasan |
+| **PATIENT 2** | `pasien2@klinik.test`<br>*(alias: `siti@klinik.test`)* | `Pasien123!` | Pasien 2 (Siti Rahayu): Pengujian reservasi multi-pasien pada sesi yang sama |
+| **PATIENT 3** | `pasien3@klinik.test`<br>*(alias: `ahmad@klinik.test`)* | `Pasien123!` | Pasien 3 (Ahmad Fauzi): Pengujian simulasi kuota penuh dan pemanggilan antrean bertahap |
 
 > 📖 **Koleksi cURL Lengkap**:  
 > Seluruh endpoint REST API Express telah didokumentasikan secara rinci beserta contoh cURL di file [`API.md`](API.md).
