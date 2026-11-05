@@ -9,62 +9,93 @@ create extension if not exists "pgcrypto";
 create extension if not exists "uuid-ossp";
 
 -- -----------------------------------------------------------------------------
--- 0. SCHEMA & COMPATIBILITY STUBS (Untuk Postgres Lokal maupun Supabase Cloud)
+-- 0. SCHEMA & COMPATIBILITY STUBS (Hanya jika belum ada / Postgres Lokal Murni)
 -- -----------------------------------------------------------------------------
-create schema if not exists auth;
-create schema if not exists storage;
+do $$
+begin
+  -- 1. Schema auth & auth.users (hanya jika belum ada di postgres lokal murni)
+  if not exists (
+    select 1 from information_schema.tables 
+    where table_schema = 'auth' and table_name = 'users'
+  ) then
+    begin
+      execute 'create schema if not exists auth';
+      execute 'create table if not exists auth.users (
+        id                  uuid primary key default gen_random_uuid(),
+        instance_id         uuid,
+        aud                 varchar(255) default ''authenticated'',
+        role                varchar(255) default ''authenticated'',
+        email               varchar(255) unique,
+        encrypted_password  varchar(255),
+        email_confirmed_at  timestamptz default now(),
+        raw_app_meta_data   jsonb default ''{"provider":"email","providers":["email"]}''::jsonb,
+        raw_user_meta_data  jsonb default ''{}''::jsonb,
+        created_at          timestamptz default now(),
+        updated_at          timestamptz default now()
+      )';
+    exception when insufficient_privilege then
+      null;
+    end;
+  end if;
 
--- Tabel auth.users (jika belum ada di postgres lokal murni)
-create table if not exists auth.users (
-  id                  uuid primary key default gen_random_uuid(),
-  instance_id         uuid,
-  aud                 varchar(255) default 'authenticated',
-  role                varchar(255) default 'authenticated',
-  email               varchar(255) unique,
-  encrypted_password  varchar(255),
-  email_confirmed_at  timestamptz default now(),
-  raw_app_meta_data   jsonb default '{"provider":"email","providers":["email"]}'::jsonb,
-  raw_user_meta_data  jsonb default '{}'::jsonb,
-  created_at          timestamptz default now(),
-  updated_at          timestamptz default now()
-);
+  -- 2. Stub auth.uid() jika belum tersedia
+  if not exists (
+    select 1 from pg_proc p 
+    join pg_namespace n on p.pronamespace = n.oid 
+    where n.nspname = 'auth' and p.proname = 'uid'
+  ) then
+    begin
+      execute $func$
+        create or replace function auth.uid()
+        returns uuid
+        language sql
+        stable
+        as $body$
+          select coalesce(
+            nullif(current_setting('request.jwt.claim.sub', true), ''),
+            (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
+          )::uuid;
+        $body$;
+      $func$;
+    exception when insufficient_privilege then
+      null;
+    end;
+  end if;
 
--- Stub auth.uid() jika belum tersedia
-create or replace function auth.uid()
-returns uuid
-language sql
-stable
-as $$
-  select coalesce(
-    nullif(current_setting('request.jwt.claim.sub', true), ''),
-    (nullif(current_setting('request.jwt.claims', true), '')::jsonb ->> 'sub')
-  )::uuid;
-$$;
-
--- Tabel storage.buckets & objects (jika di postgres lokal murni)
-create table if not exists storage.buckets (
-  id                  text primary key,
-  name                text not null,
-  owner               uuid references auth.users(id),
-  created_at          timestamptz default now(),
-  updated_at          timestamptz default now(),
-  public              boolean default false,
-  avif_autodetection  boolean default false,
-  file_size_limit     bigint,
-  allowed_mime_types  text[]
-);
-
-create table if not exists storage.objects (
-  id                  uuid primary key default gen_random_uuid(),
-  bucket_id           text references storage.buckets(id),
-  name                text,
-  owner               uuid references auth.users(id),
-  created_at          timestamptz default now(),
-  updated_at          timestamptz default now(),
-  last_accessed_at    timestamptz default now(),
-  metadata            jsonb default '{}'::jsonb,
-  path_tokens         text[] generated always as (string_to_array(name, '/')) stored
-);
+  -- 3. Schema storage & tabel buckets/objects jika di postgres lokal murni
+  if not exists (
+    select 1 from information_schema.tables 
+    where table_schema = 'storage' and table_name = 'buckets'
+  ) then
+    begin
+      execute 'create schema if not exists storage';
+      execute 'create table if not exists storage.buckets (
+        id                  text primary key,
+        name                text not null,
+        owner               uuid references auth.users(id),
+        created_at          timestamptz default now(),
+        updated_at          timestamptz default now(),
+        public              boolean default false,
+        avif_autodetection  boolean default false,
+        file_size_limit     bigint,
+        allowed_mime_types  text[]
+      )';
+      execute 'create table if not exists storage.objects (
+        id                  uuid primary key default gen_random_uuid(),
+        bucket_id           text references storage.buckets(id),
+        name                text,
+        owner               uuid references auth.users(id),
+        created_at          timestamptz default now(),
+        updated_at          timestamptz default now(),
+        last_accessed_at    timestamptz default now(),
+        metadata            jsonb default ''{}''::jsonb,
+        path_tokens         text[] generated always as (string_to_array(name, ''/'')) stored
+      )';
+    exception when insufficient_privilege then
+      null;
+    end;
+  end if;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- 1. ENUMS
@@ -238,7 +269,7 @@ create table if not exists public.users (
 );
 
 create table if not exists public.treatments (
-  id               varchar(255) primary key,
+  id               varchar(255) primary key default gen_random_uuid()::text,
   slug             varchar(150) unique,
   name             varchar(150) not null,
   description      text,
@@ -307,10 +338,15 @@ begin
 end;
 $$;
 
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function public.handle_new_user();
+do $$ begin
+  drop trigger if exists on_auth_user_created on auth.users;
+  create trigger on_auth_user_created
+    after insert on auth.users
+    for each row execute function public.handle_new_user();
+exception when insufficient_privilege then
+  -- Diabaikan jika role postgres tidak memiliki hak trigger langsung pada auth.users
+  null;
+end $$;
 
 -- Helper role admin
 create or replace function public.is_admin()
@@ -1021,36 +1057,44 @@ drop policy if exists "ratings: publik baca" on public.ratings;
 create policy "ratings: publik baca" on public.ratings for select to anon, authenticated using (true);
 
 -- Storage buckets
-insert into storage.buckets (id, name, public) values
-  ('avatars',        'avatars',        true),
-  ('doctor-photos',  'doctor-photos',  true),
-  ('payment-proofs', 'payment-proofs', false)
-on conflict (id) do nothing;
+do $$ begin
+  insert into storage.buckets (id, name, public) values
+    ('avatars',        'avatars',        true),
+    ('doctor-photos',  'doctor-photos',  true),
+    ('payment-proofs', 'payment-proofs', false)
+  on conflict (id) do nothing;
+exception when insufficient_privilege or undefined_table then
+  null;
+end $$;
 
 -- Storage policies
-drop policy if exists "avatars: upload milik sendiri" on storage.objects;
-create policy "avatars: upload milik sendiri"
-  on storage.objects for insert to authenticated
-  with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
+do $$ begin
+  drop policy if exists "avatars: upload milik sendiri" on storage.objects;
+  create policy "avatars: upload milik sendiri"
+    on storage.objects for insert to authenticated
+    with check (bucket_id = 'avatars' and (storage.foldername(name))[1] = auth.uid()::text);
 
-drop policy if exists "doctor-photos: admin kelola" on storage.objects;
-create policy "doctor-photos: admin kelola"
-  on storage.objects for all to authenticated
-  using (bucket_id = 'doctor-photos' and public.is_admin())
-  with check (bucket_id = 'doctor-photos' and public.is_admin());
+  drop policy if exists "doctor-photos: admin kelola" on storage.objects;
+  create policy "doctor-photos: admin kelola"
+    on storage.objects for all to authenticated
+    using (bucket_id = 'doctor-photos' and public.is_admin())
+    with check (bucket_id = 'doctor-photos' and public.is_admin());
 
-drop policy if exists "payment-proofs: upload milik sendiri" on storage.objects;
-create policy "payment-proofs: upload milik sendiri"
-  on storage.objects for insert to authenticated
-  with check (bucket_id = 'payment-proofs' and (storage.foldername(name))[1] = auth.uid()::text);
+  drop policy if exists "payment-proofs: upload milik sendiri" on storage.objects;
+  create policy "payment-proofs: upload milik sendiri"
+    on storage.objects for insert to authenticated
+    with check (bucket_id = 'payment-proofs' and (storage.foldername(name))[1] = auth.uid()::text);
 
-drop policy if exists "payment-proofs: baca milik sendiri atau admin" on storage.objects;
-create policy "payment-proofs: baca milik sendiri atau admin"
-  on storage.objects for select to authenticated
-  using (
-    bucket_id = 'payment-proofs'
-    and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin())
-  );
+  drop policy if exists "payment-proofs: baca milik sendiri atau admin" on storage.objects;
+  create policy "payment-proofs: baca milik sendiri atau admin"
+    on storage.objects for select to authenticated
+    using (
+      bucket_id = 'payment-proofs'
+      and ((storage.foldername(name))[1] = auth.uid()::text or public.is_admin())
+    );
+exception when insufficient_privilege or undefined_table or undefined_function then
+  null;
+end $$;
 
 -- -----------------------------------------------------------------------------
 -- 6. WIPE & RE-SEED LENGKAP KLINIK ESTETIKA & KECANTIKAN
