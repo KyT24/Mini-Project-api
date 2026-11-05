@@ -99,6 +99,7 @@ model doctors {
   consultation_fee  Decimal             @default(0) @db.Decimal(12, 2)
   photo             String?             @db.VarChar(255)
   specialist_id     String?
+  category          String?             @db.VarChar(100)
   is_active         Boolean             @default(true)
   created_at        DateTime            @default(now()) @db.Timestamp(6)
   updated_at        DateTime            @updatedAt @db.Timestamp(6)
@@ -112,6 +113,7 @@ model doctors {
 
   @@index([is_active])
   @@index([specialist_id])
+  @@index([category])
 }
 
 // Jadwal praktik mingguan; sesi per tanggal dibuat dari sini saat booking pertama
