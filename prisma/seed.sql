@@ -8,57 +8,80 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- -----------------------------------------------------------------------------
--- 0. STUB AUTH & STORAGE (Kompatibilitas Local PostgreSQL Non-Supabase)
+-- 0. STUB AUTH & IDENTITIES (Hanya jika belum ada / Postgres Lokal Murni)
 -- -----------------------------------------------------------------------------
-CREATE SCHEMA IF NOT EXISTS auth;
+DO $$
+BEGIN
+  -- 1. Schema auth & auth.users (hanya jika belum ada di postgres lokal murni)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'auth' AND table_name = 'users'
+  ) THEN
+    BEGIN
+      EXECUTE 'CREATE SCHEMA IF NOT EXISTS auth';
+      EXECUTE 'CREATE TABLE IF NOT EXISTS auth.users (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        instance_id UUID,
+        aud VARCHAR(255),
+        role VARCHAR(255),
+        email VARCHAR(255) UNIQUE,
+        encrypted_password VARCHAR(255),
+        email_confirmed_at TIMESTAMPTZ,
+        invited_at TIMESTAMPTZ,
+        confirmation_token VARCHAR(255),
+        confirmation_sent_at TIMESTAMPTZ,
+        recovery_token VARCHAR(255),
+        recovery_sent_at TIMESTAMPTZ,
+        email_change_token_new VARCHAR(255),
+        email_change VARCHAR(255),
+        email_change_sent_at TIMESTAMPTZ,
+        last_sign_in_at TIMESTAMPTZ,
+        raw_app_meta_data JSONB DEFAULT ''{}''::jsonb,
+        raw_user_meta_data JSONB DEFAULT ''{}''::jsonb,
+        is_super_admin BOOLEAN,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        phone VARCHAR(255),
+        phone_confirmed_at TIMESTAMPTZ,
+        phone_change VARCHAR(255),
+        phone_change_token VARCHAR(255),
+        phone_change_sent_at TIMESTAMPTZ,
+        confirmed_at TIMESTAMPTZ,
+        email_change_token_current VARCHAR(255),
+        email_change_confirm_status SMALLINT,
+        banned_until TIMESTAMPTZ,
+        reauthentication_token VARCHAR(255),
+        reauthentication_sent_at TIMESTAMPTZ,
+        is_sso_user BOOLEAN DEFAULT FALSE,
+        deleted_at TIMESTAMPTZ
+      )';
+    EXCEPTION WHEN insufficient_privilege THEN
+      NULL;
+    END;
+  END IF;
 
-CREATE TABLE IF NOT EXISTS auth.users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  instance_id UUID,
-  aud VARCHAR(255),
-  role VARCHAR(255),
-  email VARCHAR(255) UNIQUE,
-  encrypted_password VARCHAR(255),
-  email_confirmed_at TIMESTAMPTZ,
-  invited_at TIMESTAMPTZ,
-  confirmation_token VARCHAR(255),
-  confirmation_sent_at TIMESTAMPTZ,
-  recovery_token VARCHAR(255),
-  recovery_sent_at TIMESTAMPTZ,
-  email_change_token_new VARCHAR(255),
-  email_change VARCHAR(255),
-  email_change_sent_at TIMESTAMPTZ,
-  last_sign_in_at TIMESTAMPTZ,
-  raw_app_meta_data JSONB DEFAULT '{}'::jsonb,
-  raw_user_meta_data JSONB DEFAULT '{}'::jsonb,
-  is_super_admin BOOLEAN,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  phone VARCHAR(255),
-  phone_confirmed_at TIMESTAMPTZ,
-  phone_change VARCHAR(255),
-  phone_change_token VARCHAR(255),
-  phone_change_sent_at TIMESTAMPTZ,
-  confirmed_at TIMESTAMPTZ,
-  email_change_token_current VARCHAR(255),
-  email_change_confirm_status SMALLINT,
-  banned_until TIMESTAMPTZ,
-  reauthentication_token VARCHAR(255),
-  reauthentication_sent_at TIMESTAMPTZ,
-  is_sso_user BOOLEAN DEFAULT FALSE,
-  deleted_at TIMESTAMPTZ
-);
-
-CREATE TABLE IF NOT EXISTS auth.identities (
-  id TEXT NOT NULL,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  identity_data JSONB NOT NULL,
-  provider TEXT NOT NULL,
-  last_sign_in_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ,
-  updated_at TIMESTAMPTZ,
-  PRIMARY KEY (provider, id)
-);
+  -- 2. auth.identities (hanya jika belum ada di postgres lokal murni)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'auth' AND table_name = 'identities'
+  ) THEN
+    BEGIN
+      EXECUTE 'CREATE TABLE IF NOT EXISTS auth.identities (
+        id TEXT NOT NULL,
+        user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        provider_id TEXT,
+        identity_data JSONB NOT NULL,
+        provider TEXT NOT NULL,
+        last_sign_in_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ,
+        updated_at TIMESTAMPTZ,
+        PRIMARY KEY (provider, id)
+      )';
+    EXCEPTION WHEN insufficient_privilege THEN
+      NULL;
+    END;
+  END IF;
+END $$;
 
 -- -----------------------------------------------------------------------------
 -- 1. MASTER SPESIALISASI KECANTIKAN & ESTETIKA (5 Spesialisasi Utama)
@@ -175,6 +198,17 @@ ON CONFLICT (id) DO UPDATE SET
 -- -----------------------------------------------------------------------------
 -- 3. JADWAL PRAKTIK MINGGUAN (21 Slot Praktik: 0=Minggu ... 6=Sabtu)
 -- -----------------------------------------------------------------------------
+DELETE FROM public.doctor_schedules 
+WHERE id BETWEEN '33333333-0000-0000-0000-000000000001' AND '33333333-0000-0000-0000-000000000020'
+  OR doctor_id IN (
+    '22222222-0000-0000-0000-000000000001',
+    '22222222-0000-0000-0000-000000000002',
+    '22222222-0000-0000-0000-000000000003',
+    '22222222-0000-0000-0000-000000000004',
+    '22222222-0000-0000-0000-000000000005',
+    '22222222-0000-0000-0000-000000000006'
+  );
+
 INSERT INTO public.doctor_schedules (id, doctor_id, day_of_week, start_time, end_time, patient_quota, is_active) VALUES
   ('33333333-0000-0000-0000-000000000001', '22222222-0000-0000-0000-000000000001', 1, '09:00', '13:00', 12, TRUE),
   ('33333333-0000-0000-0000-000000000002', '22222222-0000-0000-0000-000000000001', 3, '13:00', '17:00', 12, TRUE),
@@ -209,21 +243,26 @@ ON CONFLICT (doctor_id, day_of_week, start_time) DO UPDATE SET
 -- -----------------------------------------------------------------------------
 -- 4. MASTER KATALOG TREATMENT ESTETIKA (14 Treatment)
 -- -----------------------------------------------------------------------------
-INSERT INTO public.treatments (slug, name, price, duration_minutes) VALUES
-  ('acne-dermapeel', 'Acne Dermapeel Therapy', 400000, 60),
-  ('ipl-acne', 'IPL Acne Clarifying Pulse', 550000, 45),
-  ('acne-laser-co2', 'Fractional CO2 Laser Scar Revision', 1800000, 90),
-  ('acne-facial', 'Deep Cleansing Acne Facial', 250000, 60),
-  ('brightening-facial', 'Radiance Infusion Brightening Facial', 300000, 60),
-  ('glow-peeling', 'Korean Glass Skin Chemical Peeling', 350000, 45),
-  ('vitamin-c-infusion', 'High-Dose Vitamin C Antioxidant Infusion', 450000, 45),
-  ('anti-aging-facial', 'Youth Renewal Collagen Facial', 400000, 75),
-  ('skin-booster', 'Polynucleotide Salmon DNA Skin Booster', 1500000, 60),
-  ('rf-lifting', 'Multi-Polar RF Skin Tightening & Lifting', 1200000, 60),
-  ('hair-treatment', 'Anti-Dandruff & Scalp Clarifying Ritual', 350000, 60),
-  ('laser-hair-removal', 'Painless Diode Laser Hair Removal', 600000, 45),
-  ('body-slimming', 'Targeted Cavitation Fat Slimming', 500000, 60),
-  ('body-contouring', 'HIFU Body Contouring & Sculpting', 1500000, 90)
+DO $$ BEGIN
+  ALTER TABLE public.treatments ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
+EXCEPTION WHEN OTHERS THEN NULL;
+END $$;
+
+INSERT INTO public.treatments (id, slug, name, price, duration_minutes) VALUES
+  (gen_random_uuid()::text, 'acne-dermapeel', 'Acne Dermapeel Therapy', 400000, 60),
+  (gen_random_uuid()::text, 'ipl-acne', 'IPL Acne Clarifying Pulse', 550000, 45),
+  (gen_random_uuid()::text, 'acne-laser-co2', 'Fractional CO2 Laser Scar Revision', 1800000, 90),
+  (gen_random_uuid()::text, 'acne-facial', 'Deep Cleansing Acne Facial', 250000, 60),
+  (gen_random_uuid()::text, 'brightening-facial', 'Radiance Infusion Brightening Facial', 300000, 60),
+  (gen_random_uuid()::text, 'glow-peeling', 'Korean Glass Skin Chemical Peeling', 350000, 45),
+  (gen_random_uuid()::text, 'vitamin-c-infusion', 'High-Dose Vitamin C Antioxidant Infusion', 450000, 45),
+  (gen_random_uuid()::text, 'anti-aging-facial', 'Youth Renewal Collagen Facial', 400000, 75),
+  (gen_random_uuid()::text, 'skin-booster', 'Polynucleotide Salmon DNA Skin Booster', 1500000, 60),
+  (gen_random_uuid()::text, 'rf-lifting', 'Multi-Polar RF Skin Tightening & Lifting', 1200000, 60),
+  (gen_random_uuid()::text, 'hair-treatment', 'Anti-Dandruff & Scalp Clarifying Ritual', 350000, 60),
+  (gen_random_uuid()::text, 'laser-hair-removal', 'Painless Diode Laser Hair Removal', 600000, 45),
+  (gen_random_uuid()::text, 'body-slimming', 'Targeted Cavitation Fat Slimming', 500000, 60),
+  (gen_random_uuid()::text, 'body-contouring', 'HIFU Body Contouring & Sculpting', 1500000, 90)
 ON CONFLICT (slug) DO UPDATE SET
   name = EXCLUDED.name,
   price = EXCLUDED.price,
@@ -245,6 +284,37 @@ DECLARE
   v_pw_hash      VARCHAR(255) := crypt('Admin123!', gen_salt('bf'));
   v_pw_hash_user VARCHAR(255) := crypt('Pasien123!', gen_salt('bf'));
 BEGIN
+  -- Bersihkan akun jika ada email sama dengan UUID berbeda agar tidak bentrok unique constraint pada email
+  DELETE FROM public.users WHERE email IN (
+    'admin@klinik.test', 'pasien@klinik.test', 'pasien1@klinik.test',
+    'siti@klinik.test', 'pasien2@klinik.test',
+    'ahmad@klinik.test', 'pasien3@klinik.test',
+    'clara@klinik.test'
+  ) AND id NOT IN (
+    v_admin_id::text, v_patient_id_1::text, v_patient_id_2::text, v_patient_id_3::text, v_patient_id_4::text,
+    v_p1_alias::text, v_p2_alias::text, v_p3_alias::text
+  );
+
+  DELETE FROM public.profiles WHERE email IN (
+    'admin@klinik.test', 'pasien@klinik.test', 'pasien1@klinik.test',
+    'siti@klinik.test', 'pasien2@klinik.test',
+    'ahmad@klinik.test', 'pasien3@klinik.test',
+    'clara@klinik.test'
+  ) AND id NOT IN (
+    v_admin_id, v_patient_id_1, v_patient_id_2, v_patient_id_3, v_patient_id_4,
+    v_p1_alias, v_p2_alias, v_p3_alias
+  );
+
+  DELETE FROM auth.users WHERE email IN (
+    'admin@klinik.test', 'pasien@klinik.test', 'pasien1@klinik.test',
+    'siti@klinik.test', 'pasien2@klinik.test',
+    'ahmad@klinik.test', 'pasien3@klinik.test',
+    'clara@klinik.test'
+  ) AND id NOT IN (
+    v_admin_id, v_patient_id_1, v_patient_id_2, v_patient_id_3, v_patient_id_4,
+    v_p1_alias, v_p2_alias, v_p3_alias
+  );
+
   -- A. Admin Account: admin@klinik.test / Admin123!
   INSERT INTO auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -258,16 +328,20 @@ BEGIN
     encrypted_password = EXCLUDED.encrypted_password,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (v_admin_id::text, v_admin_id, v_admin_id::text, format('{"sub":"%s","email":"admin@klinik.test"}', v_admin_id)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (v_admin_id::text, v_admin_id, v_admin_id::text, format('{"sub":"%s","email":"admin@klinik.test"}', v_admin_id)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role)
   VALUES (v_admin_id, 'admin@klinik.test', 'Admin Utama Klinik Estetika', '081200000001', 'admin')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'admin';
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
-  VALUES (v_admin_id, 'admin@klinik.test', 'Admin Utama Klinik Estetika', '081200000001', v_pw_hash, 'ADMIN')
+  VALUES (v_admin_id::text, 'admin@klinik.test', 'Admin Utama Klinik Estetika', '081200000001', v_pw_hash, 'ADMIN')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'ADMIN';
 
   -- B. Patient Demo 1: pasien@klinik.test / Pasien123!
@@ -283,16 +357,20 @@ BEGIN
     encrypted_password = EXCLUDED.encrypted_password,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (v_patient_id_1::text, v_patient_id_1, v_patient_id_1::text, format('{"sub":"%s","email":"pasien@klinik.test"}', v_patient_id_1)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (v_patient_id_1::text, v_patient_id_1, v_patient_id_1::text, format('{"sub":"%s","email":"pasien@klinik.test"}', v_patient_id_1)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
   VALUES (v_patient_id_1, 'pasien@klinik.test', 'Budi Pasien Demo', '081234567890', 'patient', '1995-08-17', 'male', 'Jl. Senopati No. 45, Jakarta Selatan')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'patient';
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
-  VALUES (v_patient_id_1, 'pasien@klinik.test', 'Budi Pasien Demo', '081234567890', v_pw_hash_user, 'PATIENT')
+  VALUES (v_patient_id_1::text, 'pasien@klinik.test', 'Budi Pasien Demo', '081234567890', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 
   -- C. Patient Demo 2: siti@klinik.test / Pasien123!
@@ -308,16 +386,20 @@ BEGIN
     encrypted_password = EXCLUDED.encrypted_password,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (v_patient_id_2::text, v_patient_id_2, v_patient_id_2::text, format('{"sub":"%s","email":"siti@klinik.test"}', v_patient_id_2)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (v_patient_id_2::text, v_patient_id_2, v_patient_id_2::text, format('{"sub":"%s","email":"siti@klinik.test"}', v_patient_id_2)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
   VALUES (v_patient_id_2, 'siti@klinik.test', 'Siti Rahayu', '081298765431', 'patient', '1998-03-24', 'female', 'Jl. Gandaria I No. 12, Kebayoran Baru, Jakarta Selatan')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'patient';
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
-  VALUES (v_patient_id_2, 'siti@klinik.test', 'Siti Rahayu', '081298765431', v_pw_hash_user, 'PATIENT')
+  VALUES (v_patient_id_2::text, 'siti@klinik.test', 'Siti Rahayu', '081298765431', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 
   -- D. Patient Demo 3: ahmad@klinik.test / Pasien123!
@@ -333,16 +415,20 @@ BEGIN
     encrypted_password = EXCLUDED.encrypted_password,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (v_patient_id_3::text, v_patient_id_3, v_patient_id_3::text, format('{"sub":"%s","email":"ahmad@klinik.test"}', v_patient_id_3)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (v_patient_id_3::text, v_patient_id_3, v_patient_id_3::text, format('{"sub":"%s","email":"ahmad@klinik.test"}', v_patient_id_3)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
   VALUES (v_patient_id_3, 'ahmad@klinik.test', 'Ahmad Fauzi', '081377889901', 'patient', '1992-11-10', 'male', 'Jl. Tebet Barat Dalam No. 8, Jakarta Selatan')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'patient';
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
-  VALUES (v_patient_id_3, 'ahmad@klinik.test', 'Ahmad Fauzi', '081377889901', v_pw_hash_user, 'PATIENT')
+  VALUES (v_patient_id_3::text, 'ahmad@klinik.test', 'Ahmad Fauzi', '081377889901', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 
   -- E. Patient Demo 4: clara@klinik.test / Pasien123!
@@ -358,16 +444,20 @@ BEGIN
     encrypted_password = EXCLUDED.encrypted_password,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES (v_patient_id_4::text, v_patient_id_4, v_patient_id_4::text, format('{"sub":"%s","email":"clara@klinik.test"}', v_patient_id_4)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES (v_patient_id_4::text, v_patient_id_4, v_patient_id_4::text, format('{"sub":"%s","email":"clara@klinik.test"}', v_patient_id_4)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
   VALUES (v_patient_id_4, 'clara@klinik.test', 'Clara Valentine', '081288991122', 'patient', '1997-02-14', 'female', 'Jl. Panglima Polim IX No. 20, Jakarta Selatan')
   ON CONFLICT (id) DO UPDATE SET full_name = EXCLUDED.full_name, role = 'patient';
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
-  VALUES (v_patient_id_4, 'clara@klinik.test', 'Clara Valentine', '081288991122', v_pw_hash_user, 'PATIENT')
+  VALUES (v_patient_id_4::text, 'clara@klinik.test', 'Clara Valentine', '081288991122', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 
   -- F. Explicit Testing Accounts: pasien1@klinik.test, pasien2@klinik.test, pasien3@klinik.test
@@ -378,12 +468,16 @@ BEGIN
     ('00000000-0000-0000-0000-000000000000', v_p3_alias, 'authenticated', 'authenticated', 'pasien3@klinik.test', v_pw_hash_user, NOW(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Ahmad Fauzi (Pasien 3)","phone_number":"081234567803"}'::jsonb, NOW(), NOW())
   ON CONFLICT (id) DO UPDATE SET encrypted_password = EXCLUDED.encrypted_password, raw_user_meta_data = EXCLUDED.raw_user_meta_data;
 
-  INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-  VALUES 
-    (v_p1_alias::text, v_p1_alias, v_p1_alias::text, format('{"sub":"%s","email":"pasien1@klinik.test"}', v_p1_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
-    (v_p2_alias::text, v_p2_alias, v_p2_alias::text, format('{"sub":"%s","email":"pasien2@klinik.test"}', v_p2_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
-    (v_p3_alias::text, v_p3_alias, v_p3_alias::text, format('{"sub":"%s","email":"pasien3@klinik.test"}', v_p3_alias)::jsonb, 'email', NOW(), NOW(), NOW())
-  ON CONFLICT (provider, id) DO NOTHING;
+  BEGIN
+    INSERT INTO auth.identities (id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+    VALUES 
+      (v_p1_alias::text, v_p1_alias, v_p1_alias::text, format('{"sub":"%s","email":"pasien1@klinik.test"}', v_p1_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
+      (v_p2_alias::text, v_p2_alias, v_p2_alias::text, format('{"sub":"%s","email":"pasien2@klinik.test"}', v_p2_alias)::jsonb, 'email', NOW(), NOW(), NOW()),
+      (v_p3_alias::text, v_p3_alias, v_p3_alias::text, format('{"sub":"%s","email":"pasien3@klinik.test"}', v_p3_alias)::jsonb, 'email', NOW(), NOW(), NOW())
+    ON CONFLICT DO NOTHING;
+  EXCEPTION WHEN OTHERS THEN
+    NULL;
+  END;
 
   INSERT INTO public.profiles (id, email, full_name, phone_number, role, date_of_birth, gender, address)
   VALUES 
@@ -394,9 +488,9 @@ BEGIN
 
   INSERT INTO public.users (id, email, full_name, phone_number, password, role)
   VALUES 
-    (v_p1_alias, 'pasien1@klinik.test', 'Budi Pasien Satu Demo', '081234567801', v_pw_hash_user, 'PATIENT'),
-    (v_p2_alias, 'pasien2@klinik.test', 'Siti Rahayu (Pasien 2)', '081234567802', v_pw_hash_user, 'PATIENT'),
-    (v_p3_alias, 'pasien3@klinik.test', 'Ahmad Fauzi (Pasien 3)', '081234567803', v_pw_hash_user, 'PATIENT')
+    (v_p1_alias::text, 'pasien1@klinik.test', 'Budi Pasien Satu Demo', '081234567801', v_pw_hash_user, 'PATIENT'),
+    (v_p2_alias::text, 'pasien2@klinik.test', 'Siti Rahayu (Pasien 2)', '081234567802', v_pw_hash_user, 'PATIENT'),
+    (v_p3_alias::text, 'pasien3@klinik.test', 'Ahmad Fauzi (Pasien 3)', '081234567803', v_pw_hash_user, 'PATIENT')
   ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password, role = 'PATIENT';
 END $$;
 
@@ -416,6 +510,29 @@ DECLARE
   v_session_past3  UUID := '44444444-0000-0000-0000-000000000005';
   v_day_offset     DATE;
 BEGIN
+  -- Bersihkan data ratings & appointments sampel sebelumnya jika sudah ada (agar foreign key aman)
+  DELETE FROM public.ratings WHERE appointment_id IN (
+    SELECT id FROM public.appointments 
+    WHERE id BETWEEN '55555555-0000-0000-0000-000000000001' AND '55555555-0000-0000-0000-000000000008'
+       OR code LIKE 'APT-BEAUTY-%'
+       OR session_id IN (v_session_today1, v_session_today2, v_session_past1, v_session_past2, v_session_past3)
+  );
+
+  DELETE FROM public.appointments 
+  WHERE id BETWEEN '55555555-0000-0000-0000-000000000001' AND '55555555-0000-0000-0000-000000000008'
+     OR code LIKE 'APT-BEAUTY-%'
+     OR session_id IN (v_session_today1, v_session_today2, v_session_past1, v_session_past2, v_session_past3);
+
+  -- Bersihkan sesi praktik sampel terdahulu agar UUID sesi selalu konsisten untuk tanggal hari ini
+  DELETE FROM public.practice_sessions WHERE (
+    id IN (v_session_today1, v_session_today2, v_session_past1, v_session_past2, v_session_past3)
+    OR (doctor_id = v_doc_maya AND session_date = v_today AND start_time = '08:00')
+    OR (doctor_id = v_doc_gisella AND session_date = v_today AND start_time = '09:00')
+    OR (doctor_id = v_doc_maya AND session_date = v_today - 14 AND start_time = '09:00')
+    OR (doctor_id = v_doc_gisella AND session_date = v_today - 7 AND start_time = '10:00')
+    OR (doctor_id = v_doc_kevin AND session_date = v_today - 3 AND start_time = '14:00')
+  );
+
   -- A. Sesi Hari Ini 1 (dr. Maya Lestari): 08:00 - 23:00, sedang melayani antrean #1
   INSERT INTO public.practice_sessions (
     id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
@@ -535,26 +652,14 @@ DECLARE
 BEGIN
   -- Bersihkan dummy appointments & ratings terdahulu jika sudah ada
   DELETE FROM public.ratings WHERE appointment_id IN (
-    '55555555-0000-0000-0000-000000000001',
-    '55555555-0000-0000-0000-000000000002',
-    '55555555-0000-0000-0000-000000000003',
-    '55555555-0000-0000-0000-000000000004',
-    '55555555-0000-0000-0000-000000000005',
-    '55555555-0000-0000-0000-000000000006',
-    '55555555-0000-0000-0000-000000000007',
-    '55555555-0000-0000-0000-000000000008'
+    SELECT id FROM public.appointments 
+    WHERE id BETWEEN '55555555-0000-0000-0000-000000000001' AND '55555555-0000-0000-0000-000000000008'
+       OR code LIKE 'APT-BEAUTY-%'
   );
 
-  DELETE FROM public.appointments WHERE id IN (
-    '55555555-0000-0000-0000-000000000001',
-    '55555555-0000-0000-0000-000000000002',
-    '55555555-0000-0000-0000-000000000003',
-    '55555555-0000-0000-0000-000000000004',
-    '55555555-0000-0000-0000-000000000005',
-    '55555555-0000-0000-0000-000000000006',
-    '55555555-0000-0000-0000-000000000007',
-    '55555555-0000-0000-0000-000000000008'
-  );
+  DELETE FROM public.appointments WHERE 
+    id BETWEEN '55555555-0000-0000-0000-000000000001' AND '55555555-0000-0000-0000-000000000008'
+    OR code LIKE 'APT-BEAUTY-%';
 
   -- [1] Hari Ini - Siti Rahayu (Status: done, sudah check-in, nomor urut antrean #1 sedang dilayani di TV Display)
   INSERT INTO public.appointments (
