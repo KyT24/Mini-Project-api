@@ -14,3 +14,6 @@ AuthRouter.post(
 AuthRouter.post('/login', AuthsController.login);
 AuthRouter.get('/me', verifyToken, AuthsController.me);
 AuthRouter.post('/logout', AuthsController.logout);
+AuthRouter.post('/forgot-password', AuthsController.forgotPassword);
+AuthRouter.post('/reset-password', AuthsController.resetPassword);
+AuthRouter.patch('/password', verifyToken, AuthsController.changePassword);

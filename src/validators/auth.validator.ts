@@ -37,3 +37,42 @@ export const userLoginSchema = z.object({
 });
 
 export type userLoginRequest = z.infer<typeof userLoginSchema>;
+
+// Aturan sama dengan passwordField di frontend
+const new_password = z
+  .string()
+  .min(8, 'Password must be at least 8 characters')
+  .max(72, 'Password have maximum 72 characters')
+  .refine((value) => /[A-Za-z]/.test(value) && /\d/.test(value), {
+    message: 'Password must contain letters and numbers',
+  });
+
+export const forgotPasswordSchema = z.object({
+  body: z.object({
+    email,
+  }),
+});
+
+export type forgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  body: z.object({
+    token: z.string().min(1, 'Token is required field'),
+    new_password,
+  }),
+});
+
+export type resetPasswordRequest = z.infer<typeof resetPasswordSchema>;
+
+export const changePasswordSchema = z.object({
+  body: z
+    .object({
+      current_password: password,
+      new_password,
+    })
+    .refine((body) => body.new_password !== body.current_password, {
+      message: 'New password must be different from current password',
+    }),
+});
+
+export type changePasswordRequest = z.infer<typeof changePasswordSchema>;

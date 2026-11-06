@@ -1,4 +1,7 @@
 import {
+  changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
   userLoginSchema,
   userRegisterSchema,
 } from '../../validators/auth.validator';
@@ -71,6 +74,42 @@ export class AuthsController {
     res.status(200).json({
       success: true,
       message: 'User logged out successfully',
+      data: {},
+    });
+  }
+
+  static async forgotPassword(req: Request, res: Response) {
+    const { body } = validate(forgotPasswordSchema, { body: req.body });
+
+    await AuthsService.forgotPassword({ body });
+
+    res.status(200).json({
+      success: true,
+      message: 'If the email is registered, a reset link has been sent',
+      data: {},
+    });
+  }
+
+  static async resetPassword(req: Request, res: Response) {
+    const { body } = validate(resetPasswordSchema, { body: req.body });
+
+    await AuthsService.resetPassword({ body });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully',
+      data: {},
+    });
+  }
+
+  static async changePassword(req: Request, res: Response) {
+    const { body } = validate(changePasswordSchema, { body: req.body });
+
+    await AuthsService.changePassword(res.locals.auth.id, { body });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
       data: {},
     });
   }

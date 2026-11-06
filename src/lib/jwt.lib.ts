@@ -1,4 +1,4 @@
-import { SignOptions, sign, verify } from "jsonwebtoken";
+import { SignOptions, decode, sign, verify } from "jsonwebtoken";
 
 export class Jwt {
     static async generate(payload: any, secretKey: string, options: SignOptions){
@@ -7,5 +7,9 @@ export class Jwt {
 
     static async verify(token: string, secretKey: string){
         return verify(token, secretKey); 
+    }
+
+    static decode(token: string){
+        return decode(token);
     }
 }
