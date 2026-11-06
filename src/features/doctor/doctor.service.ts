@@ -101,7 +101,6 @@ export class DoctorService {
       sort,
     } = query;
 
-    // Filter hanya ditambahkan jika diisi dari query
     const where: Prisma.doctorsWhereInput = {};
 
     if (is_active !== undefined) {
