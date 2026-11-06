@@ -185,9 +185,9 @@ DECLARE
     {"id": "aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa", "email": "admin@klinik.test", "full_name": "Admin Utama Klinik Estetika", "phone": "081200000001", "role": "admin", "pw": "Admin123!"},
     {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb", "email": "pasien@klinik.test", "full_name": "Budi Pasien Demo", "phone": "081234567890", "role": "patient", "pw": "Pasien123!", "dob": "1995-08-17", "gender": "male", "addr": "Jl. Senopati No. 45, Jakarta Selatan"},
     {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbb01", "email": "pasien1@klinik.test", "full_name": "Budi Pasien Satu Demo", "phone": "081234567801", "role": "patient", "pw": "Pasien123!", "dob": "1995-08-17", "gender": "male", "addr": "Jl. Senopati No. 45, Jakarta Selatan"},
-    {"id": "bbbbbbbb-2222-2222-2222-cccccccccccc", "email": "siti@klinik.test", "full_name": "Siti Rahayu", "phone": "081298765431", "role": "patient", "pw": "Pasien123!", "dob": "1998-03-24", "gender": "female", "addr": "Jl. Gandaria I No. 12, Kebayoran Baru, Jakarta Selatan"},
+    {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbbb2", "email": "siti@klinik.test", "full_name": "Siti Rahayu", "phone": "081298765431", "role": "patient", "pw": "Pasien123!", "dob": "1998-03-24", "gender": "female", "addr": "Jl. Gandaria I No. 12, Kebayoran Baru, Jakarta Selatan"},
     {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbb02", "email": "pasien2@klinik.test", "full_name": "Siti Rahayu (Pasien 2)", "phone": "081234567802", "role": "patient", "pw": "Pasien123!", "dob": "1998-03-24", "gender": "female", "addr": "Jl. Gandaria I No. 12, Kebayoran Baru, Jakarta Selatan"},
-    {"id": "bbbbbbbb-2222-2222-2222-dddddddddddd", "email": "ahmad@klinik.test", "full_name": "Ahmad Fauzi", "phone": "081377889901", "role": "patient", "pw": "Pasien123!", "dob": "1992-11-10", "gender": "male", "addr": "Jl. Tebet Barat Dalam No. 8, Jakarta Selatan"},
+    {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbbb3", "email": "ahmad@klinik.test", "full_name": "Ahmad Fauzi", "phone": "081377889901", "role": "patient", "pw": "Pasien123!", "dob": "1992-11-10", "gender": "male", "addr": "Jl. Tebet Barat Dalam No. 8, Jakarta Selatan"},
     {"id": "bbbbbbbb-2222-2222-2222-bbbbbbbbbb03", "email": "pasien3@klinik.test", "full_name": "Ahmad Fauzi (Pasien 3)", "phone": "081234567803", "role": "patient", "pw": "Pasien123!", "dob": "1992-11-10", "gender": "male", "addr": "Jl. Tebet Barat Dalam No. 8, Jakarta Selatan"},
     {"id": "bbbbbbbb-2222-2222-2222-eeeeeeeeeeee", "email": "clara@klinik.test", "full_name": "Clara Valentine", "phone": "081288991122", "role": "patient", "pw": "Pasien123!", "dob": "1997-02-14", "gender": "female", "addr": "Jl. Panglima Polim IX No. 20, Jakarta Selatan"}
   ]'::jsonb;
@@ -202,6 +202,29 @@ DECLARE
   v_gender public.gender;
   v_addr TEXT;
 BEGIN
+  -- Bersihkan user lama jika email sudah pernah dipakai dengan UUID berbeda
+  DELETE FROM auth.users WHERE email IN (
+    'admin@klinik.test',
+    'pasien@klinik.test',
+    'pasien1@klinik.test',
+    'siti@klinik.test',
+    'pasien2@klinik.test',
+    'ahmad@klinik.test',
+    'pasien3@klinik.test',
+    'clara@klinik.test'
+  );
+
+  DELETE FROM public.users WHERE email IN (
+    'admin@klinik.test',
+    'pasien@klinik.test',
+    'pasien1@klinik.test',
+    'siti@klinik.test',
+    'pasien2@klinik.test',
+    'ahmad@klinik.test',
+    'pasien3@klinik.test',
+    'clara@klinik.test'
+  );
+
   FOR v_u IN SELECT * FROM jsonb_array_elements(v_users) LOOP
     v_id := (v_u->>'id')::UUID;
     v_email := v_u->>'email';
@@ -213,7 +236,7 @@ BEGIN
     v_gender := CASE WHEN v_u ? 'gender' THEN (v_u->>'gender')::public.gender ELSE NULL END;
     v_addr := v_u->>'addr';
 
-    -- 1. auth.users (Token non-null wajib untuk kompatibilitas scan engine GoTrue)
+    -- 1. auth.users
     INSERT INTO auth.users (
       instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
       confirmation_token, recovery_token, email_change_token_new, email_change,
@@ -227,6 +250,7 @@ BEGIN
       false, NOW(), NOW(), false
     )
     ON CONFLICT (id) DO UPDATE SET
+      email = EXCLUDED.email,
       encrypted_password = EXCLUDED.encrypted_password,
       confirmation_token = '',
       recovery_token = '',
@@ -237,7 +261,7 @@ BEGIN
       email_confirmed_at = COALESCE(auth.users.email_confirmed_at, NOW()),
       updated_at = NOW();
 
-    -- 2. auth.identities (id bertipe UUID pada Supabase Cloud)
+    -- 2. auth.identities
     INSERT INTO auth.identities (
       id, user_id, provider_id, identity_data, provider, last_sign_in_at, created_at, updated_at
     ) VALUES (
@@ -245,21 +269,17 @@ BEGIN
       jsonb_build_object('sub', v_id::text, 'email', v_email, 'email_verified', true),
       'email', NOW(), NOW(), NOW()
     )
-    ON CONFLICT DO NOTHING;
+    ON CONFLICT (provider, provider_id) DO UPDATE SET
+      identity_data = jsonb_build_object('sub', v_id::text, 'email', v_email, 'email_verified', true),
+      updated_at = NOW();
 
-    UPDATE auth.identities
-    SET identity_data = jsonb_build_object('sub', v_id::text, 'email', v_email, 'email_verified', true),
-        updated_at = NOW()
-    WHERE user_id = v_id AND provider = 'email';
-
-    -- 3. public.profiles
+    -- 3. public.profiles (tanpa kolom email sesuai skema init-database.sql)
     INSERT INTO public.profiles (
-      id, email, full_name, phone_number, role, date_of_birth, gender, address
+      id, full_name, phone_number, role, date_of_birth, gender, address
     ) VALUES (
-      v_id, v_email, v_name, v_phone, v_role::public.user_role, v_dob, v_gender, v_addr
+      v_id, v_name, v_phone, v_role::public.user_role, v_dob, v_gender, v_addr
     )
     ON CONFLICT (id) DO UPDATE SET
-      email = EXCLUDED.email,
       full_name = EXCLUDED.full_name,
       phone_number = EXCLUDED.phone_number,
       role = EXCLUDED.role,
@@ -298,7 +318,7 @@ DECLARE
   v_session_past3  UUID := '44444444-0000-0000-0000-000000000005';
   v_day_offset     DATE;
 BEGIN
-  -- Bersihkan hanya 8 ratings & appointments sampel spesifik jika ada (agar foreign key aman)
+  -- Bersihkan appointments & ratings sampel terdahulu agar foreign key tidak mengunci
   DELETE FROM public.ratings WHERE appointment_id IN (
     '55555555-0000-0000-0000-000000000001',
     '55555555-0000-0000-0000-000000000002',
@@ -321,16 +341,17 @@ BEGIN
     '55555555-0000-0000-0000-000000000008'
   );
 
-  -- Bersihkan hanya 5 sesi praktik sampel terdahulu agar UUID sesi selalu konsisten untuk tanggal hari ini
-  DELETE FROM public.practice_sessions WHERE id IN (
-    v_session_today1,
-    v_session_today2,
-    v_session_past1,
-    v_session_past2,
-    v_session_past3
-  );
+  -- Bersihkan practice_sessions hari ini & masa lalu untuk dokter dan jam terkait
+  -- agar ON CONFLICT (doctor_id, session_date, start_time) tidak tertabrak oleh UUID acak dari init-database.sql
+  DELETE FROM public.practice_sessions WHERE
+    (doctor_id = v_doc_maya AND session_date = v_today AND start_time = '08:00')
+    OR (doctor_id = v_doc_gisella AND session_date = v_today AND start_time = '09:00')
+    OR (doctor_id = v_doc_maya AND session_date = (v_today - 14) AND start_time = '09:00')
+    OR (doctor_id = v_doc_gisella AND session_date = (v_today - 7) AND start_time = '10:00')
+    OR (doctor_id = v_doc_kevin AND session_date = (v_today - 3) AND start_time = '14:00')
+    OR id IN (v_session_today1, v_session_today2, v_session_past1, v_session_past2, v_session_past3);
 
-  -- A. Sesi Hari Ini 1 (dr. Maya Lestari): 08:00 - 23:00, sedang melayani antrean #1
+  -- A. Sesi Hari Ini 1 (dr. Maya Lestari): 08:00 - 23:00, antrean #1 sedang berjalan
   INSERT INTO public.practice_sessions (
     id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
   ) VALUES (
@@ -342,8 +363,12 @@ BEGIN
     (v_today + TIME '23:00') AT TIME ZONE 'Asia/Jakarta',
     15,
     1
-  ) ON CONFLICT (doctor_id, session_date, start_time) DO UPDATE SET
-    ends_at = (v_today + TIME '23:00') AT TIME ZONE 'Asia/Jakarta',
+  ) ON CONFLICT (id) DO UPDATE SET
+    session_date = EXCLUDED.session_date,
+    start_time = EXCLUDED.start_time,
+    end_time = EXCLUDED.end_time,
+    starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at,
     patient_quota = 15;
 
   -- B. Sesi Hari Ini 2 (dr. Gisella Valerie): 09:00 - 23:00
@@ -358,11 +383,60 @@ BEGIN
     (v_today + TIME '23:00') AT TIME ZONE 'Asia/Jakarta',
     12,
     0
-  ) ON CONFLICT (doctor_id, session_date, start_time) DO UPDATE SET
-    ends_at = (v_today + TIME '23:00') AT TIME ZONE 'Asia/Jakarta',
+  ) ON CONFLICT (id) DO UPDATE SET
+    session_date = EXCLUDED.session_date,
+    start_time = EXCLUDED.start_time,
+    end_time = EXCLUDED.end_time,
+    starts_at = EXCLUDED.starts_at,
+    ends_at = EXCLUDED.ends_at,
     patient_quota = 12;
 
-  -- C. Generate Sesi Otomatis 7 Hari ke Depan Berdasarkan Jadwal Mingguan Dokter
+  -- C. Sesi Masa Lalu 1 (dr. Maya - 14 Hari Lalu)
+  INSERT INTO public.practice_sessions (
+    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
+  ) VALUES (
+    v_session_past1,
+    v_doc_maya,
+    v_today - 14,
+    '09:00', '13:00',
+    (v_today - 14 + TIME '09:00') AT TIME ZONE 'Asia/Jakarta',
+    (v_today - 14 + TIME '13:00') AT TIME ZONE 'Asia/Jakarta',
+    12,
+    2
+  ) ON CONFLICT (id) DO UPDATE SET
+    patient_quota = 12;
+
+  -- D. Sesi Masa Lalu 2 (dr. Gisella - 7 Hari Lalu)
+  INSERT INTO public.practice_sessions (
+    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
+  ) VALUES (
+    v_session_past2,
+    v_doc_gisella,
+    v_today - 7,
+    '10:00', '14:00',
+    (v_today - 7 + TIME '10:00') AT TIME ZONE 'Asia/Jakarta',
+    (v_today - 7 + TIME '14:00') AT TIME ZONE 'Asia/Jakarta',
+    10,
+    1
+  ) ON CONFLICT (id) DO UPDATE SET
+    patient_quota = 10;
+
+  -- E. Sesi Masa Lalu 3 (dr. Kevin - 3 Hari Lalu)
+  INSERT INTO public.practice_sessions (
+    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
+  ) VALUES (
+    v_session_past3,
+    v_doc_kevin,
+    v_today - 3,
+    '14:00', '18:00',
+    (v_today - 3 + TIME '14:00') AT TIME ZONE 'Asia/Jakarta',
+    (v_today - 3 + TIME '18:00') AT TIME ZONE 'Asia/Jakarta',
+    8,
+    1
+  ) ON CONFLICT (id) DO UPDATE SET
+    patient_quota = 8;
+
+  -- F. Generate Sesi Otomatis 7 Hari ke Depan Berdasarkan Jadwal Mingguan Dokter
   FOR i IN 1..7 LOOP
     v_day_offset := v_today + i;
     INSERT INTO public.practice_sessions (
@@ -381,49 +455,6 @@ BEGIN
       AND ds.is_active = TRUE
     ON CONFLICT (doctor_id, session_date, start_time) DO NOTHING;
   END LOOP;
-
-  -- D. Sesi Masa Lalu (Untuk Statistik Grafik, Laporan Omzet & Rating)
-  -- Sesi 14 hari lalu (dr. Maya)
-  INSERT INTO public.practice_sessions (
-    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
-  ) VALUES (
-    v_session_past1,
-    v_doc_maya,
-    v_today - 14,
-    '09:00', '13:00',
-    (v_today - 14 + TIME '09:00') AT TIME ZONE 'Asia/Jakarta',
-    (v_today - 14 + TIME '13:00') AT TIME ZONE 'Asia/Jakarta',
-    12,
-    2
-  ) ON CONFLICT (doctor_id, session_date, start_time) DO NOTHING;
-
-  -- Sesi 7 hari lalu (dr. Gisella)
-  INSERT INTO public.practice_sessions (
-    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
-  ) VALUES (
-    v_session_past2,
-    v_doc_gisella,
-    v_today - 7,
-    '10:00', '14:00',
-    (v_today - 7 + TIME '10:00') AT TIME ZONE 'Asia/Jakarta',
-    (v_today - 7 + TIME '14:00') AT TIME ZONE 'Asia/Jakarta',
-    10,
-    1
-  ) ON CONFLICT (doctor_id, session_date, start_time) DO NOTHING;
-
-  -- Sesi 3 hari lalu (dr. Kevin)
-  INSERT INTO public.practice_sessions (
-    id, doctor_id, session_date, start_time, end_time, starts_at, ends_at, patient_quota, current_queue_number
-  ) VALUES (
-    v_session_past3,
-    v_doc_kevin,
-    v_today - 3,
-    '14:00', '18:00',
-    (v_today - 3 + TIME '14:00') AT TIME ZONE 'Asia/Jakarta',
-    (v_today - 3 + TIME '18:00') AT TIME ZONE 'Asia/Jakarta',
-    8,
-    1
-  ) ON CONFLICT (doctor_id, session_date, start_time) DO NOTHING;
 END $$;
 
 -- -----------------------------------------------------------------------------
@@ -433,8 +464,8 @@ DO $$
 DECLARE
   v_today          DATE := (NOW() AT TIME ZONE 'Asia/Jakarta')::DATE;
   v_patient_id_1   UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb';
-  v_patient_id_2   UUID := 'bbbbbbbb-2222-2222-2222-cccccccccccc';
-  v_patient_id_3   UUID := 'bbbbbbbb-2222-2222-2222-dddddddddddd';
+  v_patient_id_2   UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbb2';
+  v_patient_id_3   UUID := 'bbbbbbbb-2222-2222-2222-bbbbbbbbbbb3';
   v_patient_id_4   UUID := 'bbbbbbbb-2222-2222-2222-eeeeeeeeeeee';
   v_doc_maya       UUID := '22222222-0000-0000-0000-000000000001';
   v_doc_gisella    UUID := '22222222-0000-0000-0000-000000000002';
@@ -445,29 +476,6 @@ DECLARE
   v_session_past3  UUID := '44444444-0000-0000-0000-000000000005';
   v_svg_proof      TEXT := 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150"><rect width="300" height="150" fill="%23e0e7ff"/><text x="20" y="50" font-family="sans-serif" font-size="14" fill="%231e1b4b" font-weight="bold">Bukti Transfer Bank BCA</text><text x="20" y="80" font-family="sans-serif" font-size="12" fill="%234338ca">Nominal: Rp 250.000</text><text x="20" y="110" font-family="sans-serif" font-size="11" fill="%236366f1">Klinik Kecantikan Arhe</text></svg>';
 BEGIN
-  -- Bersihkan hanya 8 sample appointments & ratings terdahulu secara spesifik
-  DELETE FROM public.ratings WHERE appointment_id IN (
-    '55555555-0000-0000-0000-000000000001',
-    '55555555-0000-0000-0000-000000000002',
-    '55555555-0000-0000-0000-000000000003',
-    '55555555-0000-0000-0000-000000000004',
-    '55555555-0000-0000-0000-000000000005',
-    '55555555-0000-0000-0000-000000000006',
-    '55555555-0000-0000-0000-000000000007',
-    '55555555-0000-0000-0000-000000000008'
-  );
-
-  DELETE FROM public.appointments WHERE id IN (
-    '55555555-0000-0000-0000-000000000001',
-    '55555555-0000-0000-0000-000000000002',
-    '55555555-0000-0000-0000-000000000003',
-    '55555555-0000-0000-0000-000000000004',
-    '55555555-0000-0000-0000-000000000005',
-    '55555555-0000-0000-0000-000000000006',
-    '55555555-0000-0000-0000-000000000007',
-    '55555555-0000-0000-0000-000000000008'
-  );
-
   -- [1] Hari Ini - Siti Rahayu (Status: done, sudah check-in, nomor urut antrean #1 sedang dilayani di TV Display)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
@@ -479,7 +487,7 @@ BEGIN
     '99999999-0000-0000-0000-000000000001', NOW() - INTERVAL '30 minutes', 1
   );
 
-  -- [2] Hari Ini - Ahmad Fauzi (Status: waiting_confirmation, bukti bayar SVG siap diverifikasi admin di dashboard)
+  -- [2] Hari Ini - Ahmad Fauzi (Status: waiting_confirmation)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, payment_proof_path, payment_uploaded_at, booking_number
@@ -489,8 +497,7 @@ BEGIN
     NOW() + INTERVAL '20 minutes', v_svg_proof, NOW() - INTERVAL '10 minutes', 2
   );
 
-  -- [3] Hari Ini - Budi Pasien Demo (Status: done, memiliki QR Token aktif, BELUM check-in; SIAP DI-SCAN MEJA RESEPSIONIS)
-  -- QR Token: 99999999-0000-0000-0000-000000000003
+  -- [3] Hari Ini - Budi Pasien Demo (Status: done, memiliki QR Token aktif, BELUM check-in)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, confirmed_at, booking_number, qr_token
@@ -501,7 +508,7 @@ BEGIN
     '99999999-0000-0000-0000-000000000003'
   );
 
-  -- [4] Hari Ini - Clara Valentine (Status: waiting_payment, baru pesan janji temu)
+  -- [4] Hari Ini - Clara Valentine (Status: waiting_payment)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, booking_number
@@ -511,7 +518,7 @@ BEGIN
     NOW() + INTERVAL '50 minutes', 4
   );
 
-  -- [5] Riwayat Masa Lalu 1 (14 Hari Lalu - Budi Pasien Demo, dr. Maya): Selesai & Beri Ulasan
+  -- [5] Riwayat Masa Lalu 1 (dr. Maya - 14 Hari Lalu)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, confirmed_at, booking_number, checked_in_at, queue_number
@@ -530,7 +537,7 @@ BEGIN
     NOW() - INTERVAL '14 days'
   );
 
-  -- [6] Riwayat Masa Lalu 2 (7 Hari Lalu - Siti Rahayu, dr. Gisella): Selesai & Beri Ulasan
+  -- [6] Riwayat Masa Lalu 2 (dr. Gisella - 7 Hari Lalu)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, confirmed_at, booking_number, checked_in_at, queue_number
@@ -549,7 +556,7 @@ BEGIN
     NOW() - INTERVAL '7 days'
   );
 
-  -- [7] Riwayat Masa Lalu 3 (3 Hari Lalu - Ahmad Fauzi, dr. Kevin): Selesai & Beri Ulasan
+  -- [7] Riwayat Masa Lalu 3 (dr. Kevin - 3 Hari Lalu)
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, confirmed_at, booking_number, checked_in_at, queue_number
@@ -568,7 +575,7 @@ BEGIN
     NOW() - INTERVAL '3 days'
   );
 
-  -- [8] Riwayat Masa Lalu 4 (2 Hari Lalu - Budi Pasien Demo): Ditolak Admin (contoh data status rejected)
+  -- [8] Riwayat Masa Lalu 4
   INSERT INTO public.appointments (
     id, code, patient_id, doctor_id, session_id, status, consultation_fee,
     payment_deadline, payment_proof_path, payment_uploaded_at, rejection_reason, booking_number
