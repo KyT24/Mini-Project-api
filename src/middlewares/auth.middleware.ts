@@ -27,7 +27,6 @@ export const verifyToken = async (
 };
 
 // Pakai setelah verifyToken: tolak bila role tidak ada di daftar
-// Contoh: verifyRole('ADMIN', 'STAFF') → menghasilkan middleware untuk route
 export const verifyRole = (...roles: TAuthPayload['role'][]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const auth = res.locals.auth as TAuthPayload | undefined;

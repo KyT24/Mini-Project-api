@@ -43,8 +43,6 @@ app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
   }
 });
 
-/* Centralized Error */
-
 if (process.env.NODE_ENV === 'DEVELOPMENT') {
   app.listen(PORT, () => {
     console.log(`Application Running on PORT: ${PORT}`);

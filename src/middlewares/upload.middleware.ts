@@ -16,7 +16,6 @@ const upload = multer({
 });
 
 // Ubah error multer menjadi AppError agar formatnya sama dengan error lain
-// Contoh: uploadSingleImage('photo') → middleware yang membaca 1 file dari field "photo"
 export const uploadSingleImage = (field: string) => {
   return (req: Request, res: Response, next: NextFunction) =>
     upload.single(field)(req, res, (error: unknown) => {

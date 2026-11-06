@@ -15,7 +15,6 @@ const getClient = () => {
 };
 
 export class Storage {
-  // Unggah file lalu kembalikan URL publiknya
   static async upload(path: string, file: Express.Multer.File) {
     const bucket = process.env.SUPABASE_BUCKET || 'payment-proofs';
     const storage = getClient().storage.from(bucket);

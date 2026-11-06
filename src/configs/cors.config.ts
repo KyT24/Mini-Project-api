@@ -11,7 +11,6 @@ export const corsOptions: CorsOptions = {
     const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(','); // [URL1, URL2]
 
     /*
-      IF ORIGIN NOT INSIDE ALLOWED_ORIGIN
       Request tanpa Origin (curl, Postman, buka URL langsung) tetap diizinkan
     */
     if (
