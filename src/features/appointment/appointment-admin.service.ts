@@ -44,7 +44,6 @@ export class AppointmentAdminService {
     const { status, page, limit } = query;
     await syncStatuses();
 
-    // Filter status hanya dipakai jika dikirim dari query
     const where: Prisma.appointmentsWhereInput = {};
     if (status) {
       where.status = status;

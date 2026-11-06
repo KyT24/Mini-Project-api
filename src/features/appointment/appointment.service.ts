@@ -32,7 +32,7 @@ const addDays = (date: string, days: number) => {
 
 // Kode reservasi, contoh: "APT-20261030-A1B2C3"
 const generateCode = (date: string) => {
-  const dateWithoutDash = date.replace(/-/g, ''); // "2026-10-30" → "20261030"
+  const dateWithoutDash = date.replace(/-/g, '');
   const randomPart = randomBytes(3).toString('hex').toUpperCase(); // 6 karakter acak
   return `APT-${dateWithoutDash}-${randomPart}`;
 };
